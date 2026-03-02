@@ -1,0 +1,15 @@
+ipykernel
+dotenv
+langchain
+langchain_community
+langchain_google_genai
+langchain_openai
+langgraph
+youtube-search-python
+youtube-search
+langchain_core
+wikipedia
+lxml
+langchain-tavily
+yfinance
+ddgs
