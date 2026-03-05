@@ -51,7 +51,7 @@ class CustomLogger:
         return structlog.get_logger(logger_name)
 
 if __name__ == "__main__":
-    logger = CustomLogger().get_logger(__file__)
+    logger = CustomLogger().get_logger(__file__) # __file__ -> it gives the exact file name which is execcute
     logger.info("User uploaded a file", user_id=123, filename="report.pdf")
     logger.error("Failed to process PDF", error="File not found", user_id=123)
     
