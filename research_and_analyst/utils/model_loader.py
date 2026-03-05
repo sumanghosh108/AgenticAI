@@ -108,6 +108,7 @@ class ModelLoader:
             - OpenAI
             - Google (Gemini)
             - Groq
+            - OpenRouter
 
         Returns:
             ChatOpenAI | ChatGoogleGenerativeAI | ChatGroq: LLM instance
@@ -151,10 +152,22 @@ class ModelLoader:
                 )
                 
             elif provider == "openrouter":
+                openrouter_api_key = self.api_key_mgr.get("OPENROUTER_API_KEY")
+                
+                if not openrouter_api_key:
+                    log.error("OpenRouter API key not found in environment variables")
+                    raise ValueError("OPENROUTER_API_KEY is required for OpenRouter provider")
+                
                 llm = ChatOpenAI(
                     model=model_name,
-                    api_key=self.api_key_mgr.get("OPENAI_API_KEY"),
-                    temperature=temperature,
+                    api_key=openrouter_api_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    temperature=temperature
+                    # max_tokens=max_tokens
+                    # extra_headers={
+                    #     "HTTP-Referer": "https://github.com/sumanghosh108/AgenticAI",
+                    #     "X-Title": "AgenticAI",
+                    # },
                 )
 
             else:
@@ -174,6 +187,9 @@ class ModelLoader:
 # ----------------------------------------------------------------------
 if __name__ == "__main__":
     try:
+        # Set OpenRouter as the default provider for testing
+        os.environ["LLM_PROVIDER"] = "openrouter"
+        
         loader = ModelLoader()
 
         # # Test embedding model
@@ -182,7 +198,7 @@ if __name__ == "__main__":
         # result = embeddings.embed_query("Hello, how are you?")
         # print(f"Embedding Result: {result[:5]} ...")
 
-        # Test LLM
+        # Test LLM with OpenRouter
         llm = loader.load_llm()
         print(f"LLM Loaded: {llm}")
         result = llm.invoke("Hello, how are you?")

@@ -17,7 +17,13 @@ llm:
     model_name: "gpt-4o"
     temperature: 0
 
+  openrouter:
+    provider: "openrouter"
+    model_name: "stepfun/step-3.5-flash:free"
+    temperature: 0.7
+    max_output_tokens: 2048
+
   embedding_model:
     provider: "openrouter"
-    model_name: "Step 3.5 Flash"
+    model_name: "stepfun/step-3.5-flash:free"
     temperature: 0
