@@ -28,21 +28,24 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Global */
+    /* ── Global ── */
     .main { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
     .stApp { color: #e0e0e0; }
 
-    /* Cards */
+    /* ── Auth Card ── */
     .auth-card {
         background: rgba(255,255,255,0.05);
         border: 1px solid rgba(255,255,255,0.1);
         border-radius: 16px;
         padding: 2.5rem;
         backdrop-filter: blur(10px);
-        max-width: 420px;
-        margin: 4rem auto;
+        width: 90%;
+        max-width: 460px;
+        margin: 3rem auto;
         box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
+
+    /* ── Dashboard Card ── */
     .dashboard-card {
         background: rgba(255,255,255,0.06);
         border: 1px solid rgba(255,255,255,0.12);
@@ -52,7 +55,7 @@ st.markdown("""
         backdrop-filter: blur(8px);
     }
 
-    /* Title */
+    /* ── Title ── */
     .app-title {
         text-align: center;
         font-size: 2.4rem;
@@ -61,6 +64,7 @@ st.markdown("""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.3rem;
+        word-break: break-word;
     }
     .app-subtitle {
         text-align: center;
@@ -69,7 +73,7 @@ st.markdown("""
         margin-bottom: 2rem;
     }
 
-    /* Buttons */
+    /* ── Buttons ── */
     .stButton > button {
         width: 100%;
         background: linear-gradient(135deg, #667eea, #764ba2) !important;
@@ -78,14 +82,25 @@ st.markdown("""
         border-radius: 10px !important;
         padding: 0.7rem 1.5rem !important;
         font-weight: 600 !important;
+        font-size: 0.95rem !important;
         transition: all 0.3s ease !important;
+        min-height: 44px !important;          /* touch-friendly */
     }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 6px 20px rgba(102,126,234,0.4) !important;
     }
 
-    /* Status badge */
+    /* ── Inputs — touch-friendly ── */
+    .stTextInput input, .stTextArea textarea, .stNumberInput input {
+        min-height: 44px !important;
+        font-size: 1rem !important;
+    }
+    .stSelectbox > div > div {
+        min-height: 44px !important;
+    }
+
+    /* ── Status Badges ── */
     .status-running {
         display: inline-block;
         background: #f39c12;
@@ -105,9 +120,68 @@ st.markdown("""
         font-size: 0.85rem;
     }
 
-    /* Hide Streamlit defaults */
+    /* ── Hide Streamlit Defaults ── */
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
+
+    /* ── Make Streamlit columns stack on narrow screens ── */
+    @media (max-width: 640px) {
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+        }
+        [data-testid="stHorizontalBlock"] > div {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
+    }
+
+    /* ===== TABLET (≤ 1024px) ===== */
+    @media (max-width: 1024px) {
+        .auth-card { padding: 2rem; margin: 2rem auto; }
+        .dashboard-card { padding: 1.4rem; }
+        .app-title { font-size: 2rem; }
+        .block-container { padding: 1rem 1.5rem !important; }
+    }
+
+    /* ===== MOBILE (≤ 768px) ===== */
+    @media (max-width: 768px) {
+        .auth-card {
+            padding: 1.5rem;
+            margin: 1.5rem auto;
+            border-radius: 12px;
+        }
+        .dashboard-card {
+            padding: 1.2rem;
+            border-radius: 10px;
+        }
+        .app-title { font-size: 1.7rem; }
+        .app-subtitle { font-size: 0.9rem; margin-bottom: 1.2rem; }
+        .block-container { padding: 0.5rem 1rem !important; }
+
+        /* Stack download buttons */
+        .stDownloadButton > button {
+            font-size: 0.85rem !important;
+            padding: 0.5rem 0.8rem !important;
+        }
+    }
+
+    /* ===== SMALL MOBILE (≤ 480px) ===== */
+    @media (max-width: 480px) {
+        .auth-card {
+            width: 95%;
+            padding: 1.2rem;
+            margin: 1rem auto;
+        }
+        .app-title { font-size: 1.4rem; }
+        .app-subtitle { font-size: 0.8rem; }
+        .block-container { padding: 0.3rem 0.5rem !important; }
+
+        .stButton > button {
+            padding: 0.6rem 1rem !important;
+            font-size: 0.85rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
