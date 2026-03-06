@@ -97,12 +97,12 @@ def inject_auth_css():
             display: block;
             height: 1.6em;
             line-height: 1.6em;
-            animation: rotateWords 20s infinite;
+            animation: rotateWords 22.5s infinite;
             opacity: 0;
             position: absolute;
             width: max-content;
         }}
-        /* Stagger each keyword (8 total, 2.5s each in a 20s cycle) */
+        /* Stagger each keyword (9 total, 2.5s each in a 22.5s cycle) */
         .rotating-words span:nth-child(1) {{ animation-delay: 0s; }}
         .rotating-words span:nth-child(2) {{ animation-delay: 2.5s; }}
         .rotating-words span:nth-child(3) {{ animation-delay: 5s; }}
@@ -111,6 +111,7 @@ def inject_auth_css():
         .rotating-words span:nth-child(6) {{ animation-delay: 12.5s; }}
         .rotating-words span:nth-child(7) {{ animation-delay: 15s; }}
         .rotating-words span:nth-child(8) {{ animation-delay: 17.5s; }}
+        .rotating-words span:nth-child(9) {{ animation-delay: 20s; }}
 
         @keyframes rotateWords {{
             0%   {{ opacity: 0; transform: translateY(50%); }}

@@ -21,3 +21,4 @@ psycopg2-binary
 fpdf2
 markdown
 uvicorn
+requests_oauthlib

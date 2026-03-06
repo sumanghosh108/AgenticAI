@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: agenticai_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agenticai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: agenticai_api
+    restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DB URL to use internal docker network
+      - DATABASE_URL=postgresql://postgres:password@db:5432/agenticai
+      - API_BASE_URL=http://localhost:8000/api
+    volumes:
+      - .:/app
+
+  ui:
+    build: .
+    container_name: agenticai_ui
+    restart: always
+    command: streamlit run research_and_analyst/streamlit_app.py --server.address 0.0.0.0 --server.port 8501
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    env_file:
+      - .env
+    environment:
+      # Streamlit makes backend calls; it needs to reach the 'api' container on port 8000 over the internal network
+      - API_BASE_URL=http://api:8000/api
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
