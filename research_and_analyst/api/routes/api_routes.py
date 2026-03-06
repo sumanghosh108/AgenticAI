@@ -9,6 +9,9 @@ from research_and_analyst.api.services.report_service import ReportService
 from research_and_analyst.database.db_config import (
     SessionLocal, User, hash_password, verify_password,
 )
+from research_and_analyst.auth.google_oauth import (
+    is_google_oauth_configured, exchange_code_for_user,
+)
 from research_and_analyst.logger import GLOBAL_LOGGER as log
 
 api_router = APIRouter()
@@ -99,6 +102,65 @@ async def login(req: LoginRequest):
     except Exception as e:
         log.error("Login failed", error=str(e))
         return {"success": False, "message": f"Login failed: {str(e)}"}
+    finally:
+        db.close()
+
+# ─────────────────────────────────────────────
+# Google OAuth
+# ─────────────────────────────────────────────
+
+
+class GoogleAuthRequest(BaseModel):
+    code: str = Field(..., description="Authorization code from Google OAuth redirect")
+
+
+@api_router.post("/google_auth")
+async def google_auth(req: GoogleAuthRequest):
+    """Exchange Google OAuth code for user info, auto-create or login."""
+    if not is_google_oauth_configured():
+        return {"success": False, "message": "Google OAuth is not configured on the server."}
+
+    db = SessionLocal()
+    try:
+        # Exchange code for Google profile
+        google_user = exchange_code_for_user(req.code)
+        email = google_user.get("email")
+        name = google_user.get("name", "")
+
+        if not email:
+            return {"success": False, "message": "Could not retrieve email from Google."}
+
+        # Check if user exists by email
+        user = db.query(User).filter(User.email == email).first()
+
+        if user:
+            # Existing user → login
+            log.info("Google login", username=user.username, email=email)
+            return {"success": True, "message": "Login successful", "username": user.username}
+
+        # New user → auto-create with Google name as username
+        # Handle username collision
+        base_username = name.replace(" ", "_").lower() if name else email.split("@")[0]
+        username = base_username
+        counter = 1
+        while db.query(User).filter(User.username == username).first():
+            username = f"{base_username}_{counter}"
+            counter += 1
+
+        new_user = User(
+            username=username,
+            email=email,
+            password=hash_password(f"google_oauth_{google_user.get('google_id', '')}"),
+        )
+        db.add(new_user)
+        db.commit()
+        log.info("Google signup", username=username, email=email)
+        return {"success": True, "message": "Account created via Google", "username": username}
+
+    except Exception as e:
+        db.rollback()
+        log.error("Google auth failed", error=str(e))
+        return {"success": False, "message": f"Google authentication failed: {str(e)}"}
     finally:
         db.close()
 
