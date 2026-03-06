@@ -16,3 +16,8 @@ ddgs
 structlog
 langchain_groq
 fastapi
+streamlit
+psycopg2-binary
+fpdf2
+markdown
+uvicorn
