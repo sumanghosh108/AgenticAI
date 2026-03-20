@@ -205,13 +205,15 @@ export const reportHistoryApi = {
 // ─── Health ───────────────────────────────────
 
 export const healthApi = {
-  check: () =>
-    fetch('/health').then((r) => r.json()) as Promise<{
+  check: () => {
+    const healthUrl = API_BASE.replace(/\/api$/, '/health');
+    return fetch(healthUrl).then((r) => r.json()) as Promise<{
       status: string;
       service: string;
       version: string;
       total_requests_served: number;
-    }>,
+    }>;
+  },
 };
 
 export { ApiError };
