@@ -1,17 +1,16 @@
 """
 Database configuration for the Autonomous Research Report Generator.
 
-- PostgreSQL via SQLAlchemy
-- User model with hashlib-based password hashing
+- Supabase as the backend (replaces local PostgreSQL / SQLAlchemy)
+- User model operations via Supabase REST API
+- user_report table for persisting generated reports
 """
 
 import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, inspect
-from sqlalchemy.orm import sessionmaker, declarative_base
 
 from research_and_analyst.logger import GLOBAL_LOGGER as log
 from research_and_analyst.exception.custom_exception import ResearchAnalystException
@@ -19,37 +18,12 @@ from research_and_analyst.exception.custom_exception import ResearchAnalystExcep
 load_dotenv()
 
 # ─────────────────────────────────────────────
-# Engine & Session
+# Supabase Client (lazy import to avoid circular deps)
 # ─────────────────────────────────────────────
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:Admin@localhost:5432/AgenticAI",
-)
-
-engine = create_engine(DATABASE_URL, echo=False)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base = declarative_base()
-
-
-# ─────────────────────────────────────────────
-# User Model
-# ─────────────────────────────────────────────
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    username = Column(String(100), unique=True, nullable=False, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    password = Column(String(256), nullable=False)
-    age = Column(Integer, nullable=True)
-    gender = Column(String(20), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    def __repr__(self):
-        return f"<User(id={self.id}, username={self.username}, email={self.email})>"
+def _get_supabase():
+    from research_and_analyst.database.supabase_client import supabase
+    return supabase
 
 
 # ─────────────────────────────────────────────
@@ -71,26 +45,79 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # ─────────────────────────────────────────────
-# Table Creation
+# Table Creation (no-op — tables managed in Supabase)
 # ─────────────────────────────────────────────
 
 def create_tables():
-    """Create tables if they don't exist, otherwise validate."""
-    try:
-        inspector = inspect(engine)
-        existing_tables = inspector.get_table_names()
-        required_tables = Base.metadata.tables.keys()
+    """No-op: tables are created in Supabase dashboard / SQL editor."""
+    log.info("Supabase mode — table creation managed externally")
 
-        missing = [t for t in required_tables if t not in existing_tables]
 
-        if missing:
-            Base.metadata.create_all(bind=engine)
-            log.info("Database tables created", tables=missing, url=DATABASE_URL.split("@")[-1])
-        else:
-            log.info("Database tables validated — all exist", tables=list(required_tables))
-    except Exception as e:
-        log.error("Failed to initialise database tables", error=str(e))
-        raise ResearchAnalystException("Database table initialisation failed", e)
+# ─────────────────────────────────────────────
+# User CRUD via Supabase
+# ─────────────────────────────────────────────
+
+def get_user_by_username(username: str) -> dict | None:
+    """Fetch a user row by username."""
+    sb = _get_supabase()
+    res = sb.table("users").select("*").eq("username", username).execute()
+    return res.data[0] if res.data else None
+
+
+def get_user_by_email(email: str) -> dict | None:
+    """Fetch a user row by email."""
+    sb = _get_supabase()
+    res = sb.table("users").select("*").eq("email", email).execute()
+    return res.data[0] if res.data else None
+
+
+def create_user(username: str, email: str, password_hash: str,
+                age: int | None = None, gender: str | None = None) -> dict:
+    """Insert a new user into the Supabase `users` table."""
+    sb = _get_supabase()
+    payload = {
+        "username": username,
+        "email": email,
+        "password": password_hash,
+    }
+    if age is not None:
+        payload["age"] = age
+    if gender is not None:
+        payload["gender"] = gender
+
+    res = sb.table("users").insert(payload).execute()
+    return res.data[0] if res.data else {}
+
+
+# ─────────────────────────────────────────────
+# User Report CRUD via Supabase
+# ─────────────────────────────────────────────
+
+def save_user_report(user_name: str, research_topic: str,
+                     research_domain: str | None, document: str | None) -> dict:
+    """Insert a report into the Supabase `user_report` table."""
+    sb = _get_supabase()
+    payload = {
+        "user_name": user_name,
+        "research_topic": research_topic,
+        "research_domain": research_domain or "",
+        "document": document or "",
+    }
+    res = sb.table("user_report").insert(payload).execute()
+    return res.data[0] if res.data else {}
+
+
+def get_user_reports(user_name: str) -> list[dict]:
+    """Fetch all reports for a given user, newest first."""
+    sb = _get_supabase()
+    res = (
+        sb.table("user_report")
+        .select("*")
+        .eq("user_name", user_name)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return res.data or []
 
 
 # ─────────────────────────────────────────────
@@ -99,14 +126,10 @@ def create_tables():
 
 if __name__ == "__main__":
     create_tables()
-    print("✅ Database tables created successfully")
+    print("✅ Supabase connection verified")
 
-    # Quick test: create a user
-    session = SessionLocal()
-    try:
-        test_pw = hash_password("testpass")
-        print(f"   Hash of 'testpass': {test_pw[:20]}...")
-        print(f"   Verify correct:     {verify_password('testpass', test_pw)}")
-        print(f"   Verify wrong:       {verify_password('wrong', test_pw)}")
-    finally:
-        session.close()
+    # Quick test: password hashing
+    test_pw = hash_password("testpass")
+    print(f"   Hash of 'testpass': {test_pw[:20]}...")
+    print(f"   Verify correct:     {verify_password('testpass', test_pw)}")
+    print(f"   Verify wrong:       {verify_password('wrong', test_pw)}")

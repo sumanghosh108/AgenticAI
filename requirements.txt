@@ -29,3 +29,4 @@ pdfplumber
 pandas
 numpy
 websockets
+supabase

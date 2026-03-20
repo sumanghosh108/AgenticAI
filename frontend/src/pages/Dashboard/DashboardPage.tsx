@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, TrendingUp, Stethoscope, Sparkles, Clock, ArrowRight } from 'lucide-react';
+import { Search, TrendingUp, Stethoscope, Sparkles, Clock, ArrowRight, FileText } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { decisionApi, healthApi } from '@/api/client';
+import { decisionApi, healthApi, reportHistoryApi } from '@/api/client';
 import { formatTimestamp, truncate } from '@/utils/helpers';
 import { useAuth } from '@/context/AuthContext';
 
@@ -23,13 +23,29 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [recentTasks, setRecentTasks] = useState<Record<string, unknown>[]>([]);
   const [serverHealth, setServerHealth] = useState<{ status: string; version: string } | null>(null);
+  const [pastReports, setPastReports] = useState<Array<{
+    id: number;
+    user_name: string;
+    research_topic: string;
+    research_domain: string;
+    document: string;
+    created_at: string;
+  }>>([]);
+  const [selectedReport, setSelectedReport] = useState<string | null>(null);
 
   useEffect(() => {
     healthApi.check().then(setServerHealth).catch(() => {});
     decisionApi.listTasks().then((r) => {
       if (r.success) setRecentTasks(r.tasks.slice(0, 5));
     }).catch(() => {});
-  }, []);
+
+    // Fetch previous reports for the logged-in user
+    if (user?.username) {
+      reportHistoryApi.getReports(user.username).then((r) => {
+        if (r.success) setPastReports(r.reports);
+      }).catch(() => {});
+    }
+  }, [user?.username]);
 
   const handleAnalyze = async () => {
     if (!query.trim()) return;
@@ -166,6 +182,43 @@ export function DashboardPage() {
             </div>
           </Card>
         </div>
+
+        {/* Previous Reports from Supabase */}
+        <Card title="Previous Reports">
+          {pastReports.length === 0 ? (
+            <p className="text-gray-400 text-sm py-4">No saved reports yet. Generated reports will appear here.</p>
+          ) : (
+            <div className="space-y-3">
+              {pastReports.map((rpt) => (
+                <div key={rpt.id} className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setSelectedReport(selectedReport === String(rpt.id) ? null : String(rpt.id))}
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 text-left">
+                      <FileText className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{rpt.research_topic}</p>
+                        <p className="text-xs text-gray-400">
+                          {rpt.research_domain && <span className="capitalize">{rpt.research_domain} · </span>}
+                          {new Date(rpt.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className={`w-4 h-4 text-gray-300 transition-transform ${selectedReport === String(rpt.id) ? 'rotate-90' : ''}`} />
+                  </button>
+                  {selectedReport === String(rpt.id) && (
+                    <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-800">
+                      <pre className="mt-3 text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                        {rpt.document || 'No document content.'}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   );

@@ -174,6 +174,34 @@ export const reportApi = {
     request<Record<string, unknown>>(`/report_status/${threadId}`),
 };
 
+// ─── Report History (Supabase) ────────────────
+
+export const reportHistoryApi = {
+  saveReport: (data: {
+    user_name: string;
+    research_topic: string;
+    research_domain: string;
+    document: string;
+  }) =>
+    request<{ success: boolean; message: string; report?: Record<string, unknown> }>(
+      '/save_report',
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  getReports: (username: string) =>
+    request<{
+      success: boolean;
+      reports: Array<{
+        id: number;
+        user_name: string;
+        research_topic: string;
+        research_domain: string;
+        document: string;
+        created_at: string;
+      }>;
+    }>(`/user_reports/${username}`),
+};
+
 // ─── Health ───────────────────────────────────
 
 export const healthApi = {
