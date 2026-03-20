@@ -140,10 +140,20 @@ DAILY_REQUEST_LIMIT = 5
 
 
 def get_daily_usage(username: str) -> dict:
-    """Get today's usage for a user. Returns {request_count, remaining, limit_reached}."""
+    """Get today's usage via ACID-safe database function."""
+    try:
+        res = _sb().rpc("get_daily_usage", {
+            "p_username": username,
+            "p_limit": DAILY_REQUEST_LIMIT,
+        }).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    # Fallback to manual query if RPC not available
     from datetime import date
     today = date.today().isoformat()
-
     res = (
         _sb().table("daily_usage")
         .select("*")
@@ -151,12 +161,7 @@ def get_daily_usage(username: str) -> dict:
         .eq("request_date", today)
         .execute()
     )
-
-    if res.data:
-        count = res.data[0]["request_count"]
-    else:
-        count = 0
-
+    count = res.data[0]["request_count"] if res.data else 0
     return {
         "username": username,
         "date": today,
@@ -167,10 +172,20 @@ def get_daily_usage(username: str) -> dict:
 
 
 def increment_daily_usage(username: str) -> dict:
-    """Increment today's request count. Returns updated usage info."""
+    """Atomic increment via database function (race-condition safe)."""
+    try:
+        res = _sb().rpc("increment_daily_usage", {
+            "p_username": username,
+            "p_limit": DAILY_REQUEST_LIMIT,
+        }).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    # Fallback to manual upsert if RPC not available
     from datetime import date, datetime
     today = date.today().isoformat()
-
     res = (
         _sb().table("daily_usage")
         .select("*")
@@ -178,7 +193,6 @@ def increment_daily_usage(username: str) -> dict:
         .eq("request_date", today)
         .execute()
     )
-
     if res.data:
         new_count = res.data[0]["request_count"] + 1
         _sb().table("daily_usage").update({
@@ -192,7 +206,6 @@ def increment_daily_usage(username: str) -> dict:
             "request_date": today,
             "request_count": 1,
         }).execute()
-
     return {
         "username": username,
         "date": today,
@@ -227,6 +240,107 @@ async def async_save_user_report(user_name: str, research_topic: str,
 
 async def async_get_user_reports(user_name: str) -> list[dict]:
     return await asyncio.to_thread(get_user_reports, user_name)
+
+
+# ─────────────────────────────────────────────
+# Report Files (B2 metadata) — sync
+# ─────────────────────────────────────────────
+
+def save_report_file(
+    username: str,
+    report_id: int,
+    file_type: str,
+    file_name: str,
+    b2_file_id: str,
+    b2_file_path: str,
+    file_size: int = 0,
+    content_sha1: str = "",
+) -> dict:
+    """Save file metadata via ACID-safe RPC (validates report ownership)."""
+    try:
+        res = _sb().rpc("save_report_file", {
+            "p_username": username,
+            "p_report_id": report_id,
+            "p_file_type": file_type,
+            "p_file_name": file_name,
+            "p_b2_file_id": b2_file_id,
+            "p_b2_file_path": b2_file_path,
+            "p_file_size": file_size,
+            "p_content_sha1": content_sha1,
+        }).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    # Fallback to direct insert
+    payload = {
+        "username": username,
+        "report_id": report_id,
+        "file_type": file_type,
+        "file_name": file_name,
+        "b2_file_id": b2_file_id,
+        "b2_file_path": b2_file_path,
+        "file_size": file_size,
+        "content_sha1": content_sha1,
+    }
+    res = _sb().table("report_files").insert(payload).execute()
+    return res.data[0] if res.data else {}
+
+
+def get_report_files(username: str) -> list[dict]:
+    """Get all report files for a user."""
+    res = (
+        _sb().table("report_files")
+        .select("*")
+        .eq("username", username)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return res.data or []
+
+
+def get_report_files_by_report(report_id: int) -> list[dict]:
+    """Get files for a specific report."""
+    res = (
+        _sb().table("report_files")
+        .select("*")
+        .eq("report_id", report_id)
+        .execute()
+    )
+    return res.data or []
+
+
+def get_report_file_by_id(file_id: int, username: str) -> Optional[dict]:
+    """Get a single file record — only if it belongs to the given user (security)."""
+    res = (
+        _sb().table("report_files")
+        .select("*")
+        .eq("id", file_id)
+        .eq("username", username)
+        .execute()
+    )
+    return res.data[0] if res.data else None
+
+
+# ─────────────────────────────────────────────
+# Report Files — async (non-blocking)
+# ─────────────────────────────────────────────
+
+async def async_save_report_file(**kwargs) -> dict:
+    return await asyncio.to_thread(save_report_file, **kwargs)
+
+
+async def async_get_report_files(username: str) -> list[dict]:
+    return await asyncio.to_thread(get_report_files, username)
+
+
+async def async_get_report_files_by_report(report_id: int) -> list[dict]:
+    return await asyncio.to_thread(get_report_files_by_report, report_id)
+
+
+async def async_get_report_file_by_id(file_id: int, username: str) -> Optional[dict]:
+    return await asyncio.to_thread(get_report_file_by_id, file_id, username)
 
 
 # ─────────────────────────────────────────────

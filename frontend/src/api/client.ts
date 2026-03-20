@@ -223,6 +223,51 @@ export const reportHistoryApi = {
     }>(`/user_reports/${username}`),
 };
 
+// ─── Report Files (B2 Storage) ───────────────
+
+export interface ReportFile {
+  id: number;
+  username: string;
+  report_id: number;
+  file_type: string;
+  file_name: string;
+  b2_file_id: string;
+  file_size: number;
+  created_at: string;
+}
+
+export const reportFilesApi = {
+  generateFiles: (report_id: number, username: string) =>
+    request<{
+      success: boolean;
+      files?: Array<{ type: string; name: string; id: number }>;
+      message?: string;
+    }>('/reports/generate_files', {
+      method: 'POST',
+      body: JSON.stringify({ report_id, username }),
+    }),
+
+  listFiles: (username: string) =>
+    request<{ success: boolean; files: ReportFile[] }>(
+      `/reports/files/${username}`
+    ),
+
+  getFilesForReport: (report_id: number, username: string) =>
+    request<{ success: boolean; files: ReportFile[] }>(
+      `/reports/files_for_report/${report_id}?username=${username}`
+    ),
+
+  getDownloadUrl: (file_id: number, username: string) =>
+    request<{
+      success: boolean;
+      download_url?: string;
+      file_name?: string;
+      file_type?: string;
+      expires_in?: number;
+      message?: string;
+    }>(`/reports/download/${file_id}?username=${username}`),
+};
+
 // ─── Health ───────────────────────────────────
 
 export const healthApi = {

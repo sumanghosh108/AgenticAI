@@ -7,7 +7,7 @@ import { Button } from '@/components/common/Button';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { useTaskProgress } from '@/hooks/useTaskProgress';
-import { decisionApi, feedbackApi, reportHistoryApi } from '@/api/client';
+import { decisionApi, feedbackApi, reportHistoryApi, reportFilesApi } from '@/api/client';
 import type { AgentInfo } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '@/context/AuthContext';
@@ -100,13 +100,21 @@ export function AnalysisPage() {
         if (r.success) {
           setResult(r as Record<string, unknown>);
           
-          // Auto-save to database so it shows on Dashboard
+          // Auto-save to database and generate PDF/DOCX files
           if (user?.username && progress.query) {
              reportHistoryApi.saveReport({
                user_name: user.username,
                research_topic: progress.query,
                research_domain: progress.domain || 'general',
                document: (r.final_output as string) || 'Report generated. Content missing.',
+             }).then((saveRes) => {
+               // Auto-generate PDF + DOCX in the background
+               if (saveRes.success && saveRes.report && (saveRes.report as Record<string, unknown>).id) {
+                 const reportId = (saveRes.report as Record<string, unknown>).id as number;
+                 reportFilesApi.generateFiles(reportId, user.username).catch(() => {
+                   console.error('Auto file generation failed');
+                 });
+               }
              }).catch(() => {
                console.error('Failed to auto-save report');
              });

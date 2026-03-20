@@ -17,6 +17,8 @@ from research_and_analyst.database.db_config import (
     async_save_user_report, async_get_user_reports,
     get_user_by_username, get_user_by_email,
     async_get_daily_usage, async_increment_daily_usage,
+    async_save_report_file, async_get_report_files,
+    async_get_report_files_by_report, async_get_report_file_by_id,
 )
 from research_and_analyst.auth.google_oauth import (
     is_google_oauth_configured, exchange_code_for_user,
@@ -573,3 +575,172 @@ async def list_prompt_versions():
     for v in versions:
         result[v] = pm.list_prompts(v)
     return {"success": True, "versions": result}
+
+
+# ─── Report Files (B2 Storage) ───────────────
+
+
+class GenerateFilesRequest(BaseModel):
+    report_id: int = Field(..., description="ID of the user_report record")
+    username: str = Field(..., description="Username (must match report owner)")
+
+
+_b2_client = None
+
+
+def _get_b2():
+    global _b2_client
+    if _b2_client is None:
+        from research_and_analyst.storage.b2_client import B2StorageClient
+        _b2_client = B2StorageClient()
+    return _b2_client
+
+
+@api_router.post("/reports/generate_files")
+async def generate_report_files(req: GenerateFilesRequest):
+    """
+    Generate PDF + DOCX from a saved report and upload to Backblaze B2.
+
+    Security: only the report owner (matching username) can generate files.
+    """
+    try:
+        # Fetch the report — verify ownership
+        reports = await async_get_user_reports(req.username)
+        report = next((r for r in reports if r["id"] == req.report_id), None)
+
+        if not report:
+            return {"success": False, "message": "Report not found or access denied"}
+
+        if report["user_name"] != req.username:
+            return {"success": False, "message": "Access denied"}
+
+        markdown_content = report.get("document", "")
+        if not markdown_content:
+            return {"success": False, "message": "Report has no content"}
+
+        topic = report.get("research_topic", "report")
+
+        # Generate PDF + DOCX in a thread
+        from research_and_analyst.storage.document_converter import (
+            markdown_to_pdf, markdown_to_docx, generate_file_name,
+        )
+
+        pdf_bytes = await asyncio.to_thread(markdown_to_pdf, markdown_content, topic)
+        docx_bytes = await asyncio.to_thread(markdown_to_docx, markdown_content, topic)
+
+        pdf_name = generate_file_name(req.username, topic, "pdf")
+        docx_name = generate_file_name(req.username, topic, "docx")
+
+        # Upload to B2
+        b2 = _get_b2()
+
+        pdf_result = await asyncio.to_thread(
+            b2.upload_file, pdf_bytes, pdf_name, req.username,
+            "application/pdf",
+        )
+        docx_result = await asyncio.to_thread(
+            b2.upload_file, docx_bytes, docx_name, req.username,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+        files_created = []
+
+        if pdf_result:
+            meta = await async_save_report_file(
+                username=req.username,
+                report_id=req.report_id,
+                file_type="pdf",
+                file_name=pdf_name,
+                b2_file_id=pdf_result["file_id"],
+                b2_file_path=pdf_result["file_name"],
+                file_size=pdf_result["content_length"],
+                content_sha1=pdf_result["content_sha1"],
+            )
+            files_created.append({"type": "pdf", "name": pdf_name, "id": meta.get("id")})
+
+        if docx_result:
+            meta = await async_save_report_file(
+                username=req.username,
+                report_id=req.report_id,
+                file_type="docx",
+                file_name=docx_name,
+                b2_file_id=docx_result["file_id"],
+                b2_file_path=docx_result["file_name"],
+                file_size=docx_result["content_length"],
+                content_sha1=docx_result["content_sha1"],
+            )
+            files_created.append({"type": "docx", "name": docx_name, "id": meta.get("id")})
+
+        if not files_created:
+            return {"success": False, "message": "Upload to storage failed. Check B2 credentials."}
+
+        log.info("Report files generated", user=req.username, report_id=req.report_id, files=len(files_created))
+        return {"success": True, "files": files_created}
+
+    except Exception as e:
+        log.error("Generate files failed", error=str(e))
+        return {"success": False, "message": "Failed to generate files. Check server logs."}
+
+
+@api_router.get("/reports/files/{username}")
+async def list_user_files(username: str):
+    """List all report files for a user."""
+    try:
+        files = await async_get_report_files(username)
+        return {"success": True, "files": files}
+    except Exception as e:
+        log.error("List files failed", error=str(e))
+        return {"success": False, "message": "Failed to list files."}
+
+
+@api_router.get("/reports/download/{file_id}")
+async def download_report_file(file_id: int, username: str = ""):
+    """
+    Generate a time-limited authorized download URL for a report file.
+
+    Security: username must match the file owner. URL expires in 1 hour.
+    """
+    if not username:
+        return {"success": False, "message": "Username required"}
+
+    try:
+        file_record = await async_get_report_file_by_id(file_id, username)
+        if not file_record:
+            return {"success": False, "message": "File not found or access denied"}
+
+        # Generate authorized download URL (1 hour validity)
+        b2 = _get_b2()
+        download_url = await asyncio.to_thread(
+            b2.get_download_url, file_record["b2_file_id"], 3600,
+        )
+
+        if not download_url:
+            return {"success": False, "message": "Failed to generate download URL"}
+
+        return {
+            "success": True,
+            "download_url": download_url,
+            "file_name": file_record["file_name"],
+            "file_type": file_record["file_type"],
+            "expires_in": 3600,
+        }
+
+    except Exception as e:
+        log.error("Download URL generation failed", error=str(e))
+        return {"success": False, "message": "Failed to generate download link."}
+
+
+@api_router.get("/reports/files_for_report/{report_id}")
+async def get_files_for_report(report_id: int, username: str = ""):
+    """Get all generated files for a specific report (with ownership check)."""
+    if not username:
+        return {"success": False, "message": "Username required"}
+
+    try:
+        files = await async_get_report_files_by_report(report_id)
+        # Filter to only this user's files
+        user_files = [f for f in files if f["username"] == username]
+        return {"success": True, "files": user_files}
+    except Exception as e:
+        log.error("Get report files failed", error=str(e))
+        return {"success": False, "message": "Failed to get files."}

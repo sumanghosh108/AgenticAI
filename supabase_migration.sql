@@ -1,60 +1,136 @@
 -- ============================================
--- AgenticAI — Supabase Schema (v2)
--- Foreign keys + ACID-safe operations
--- Run this in the Supabase SQL Editor
+-- AgenticAI — Migration Script (v1 → v2)
+-- Adds FK constraints, CHECK constraints, and
+-- ACID-safe functions to EXISTING tables.
+-- Run this in the Supabase SQL Editor.
 -- ============================================
 
 -- ─────────────────────────────────────────────
--- 1. Users (root table — all others reference this)
+-- 1. Add CHECK constraints to users table
 -- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS users (
-    id          BIGSERIAL   PRIMARY KEY,
-    username    TEXT        NOT NULL UNIQUE,
-    email       TEXT        NOT NULL UNIQUE,
-    password    TEXT        NOT NULL,
-    age         INTEGER     CHECK (age IS NULL OR (age >= 0 AND age <= 150)),
-    gender      TEXT        CHECK (gender IS NULL OR gender IN ('male', 'female', 'other', 'prefer_not_to_say')),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'users_age_check'
+    ) THEN
+        ALTER TABLE users ADD CONSTRAINT users_age_check
+            CHECK (age IS NULL OR (age >= 0 AND age <= 150));
+    END IF;
+END $$;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'users_gender_check'
+    ) THEN
+        ALTER TABLE users ADD CONSTRAINT users_gender_check
+            CHECK (gender IS NULL OR gender IN ('male', 'female', 'other', 'prefer_not_to_say'));
+    END IF;
+END $$;
+
+-- Ensure indexes exist
 CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
 CREATE INDEX IF NOT EXISTS idx_users_email    ON users (email);
 
--- ─────────────────────────────────────────────
--- 2. User reports — FK to users(username)
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS user_report (
-    id               BIGSERIAL   PRIMARY KEY,
-    user_name        TEXT        NOT NULL
-                     REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
-    research_topic   TEXT        NOT NULL,
-    research_domain  TEXT        NOT NULL DEFAULT ''
-                     CHECK (research_domain IN ('', 'general', 'finance', 'healthcare')),
-    document         TEXT        NOT NULL DEFAULT '',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_user_report_user      ON user_report (user_name);
-CREATE INDEX IF NOT EXISTS idx_user_report_created    ON user_report (created_at DESC);
 
 -- ─────────────────────────────────────────────
--- 3. Daily usage — FK to users(username)
+-- 2. Add FK + constraints to user_report
 -- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS daily_usage (
-    id              BIGSERIAL   PRIMARY KEY,
-    username        TEXT        NOT NULL
-                    REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
-    request_date    DATE        NOT NULL DEFAULT CURRENT_DATE,
-    request_count   INTEGER     NOT NULL DEFAULT 0 CHECK (request_count >= 0),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (username, request_date)
-);
+
+-- Add default to research_domain if missing
+ALTER TABLE user_report ALTER COLUMN research_domain SET DEFAULT '';
+ALTER TABLE user_report ALTER COLUMN document SET DEFAULT '';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'user_report_user_name_fkey'
+          AND table_name = 'user_report'
+    ) THEN
+        ALTER TABLE user_report
+            ADD CONSTRAINT user_report_user_name_fkey
+            FOREIGN KEY (user_name) REFERENCES users(username)
+            ON UPDATE CASCADE ON DELETE CASCADE;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'user_report_domain_check'
+    ) THEN
+        ALTER TABLE user_report ADD CONSTRAINT user_report_domain_check
+            CHECK (research_domain IN ('', 'general', 'finance', 'healthcare'));
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_user_report_user    ON user_report (user_name);
+CREATE INDEX IF NOT EXISTS idx_user_report_created ON user_report (created_at DESC);
+
+
+-- ─────────────────────────────────────────────
+-- 3. Add FK + constraints to daily_usage
+-- ─────────────────────────────────────────────
+
+-- Add updated_at column if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'daily_usage' AND column_name = 'updated_at'
+    ) THEN
+        ALTER TABLE daily_usage ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'daily_usage_username_fkey'
+          AND table_name = 'daily_usage'
+    ) THEN
+        ALTER TABLE daily_usage
+            ADD CONSTRAINT daily_usage_username_fkey
+            FOREIGN KEY (username) REFERENCES users(username)
+            ON UPDATE CASCADE ON DELETE CASCADE;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'daily_usage_count_check'
+    ) THEN
+        ALTER TABLE daily_usage ADD CONSTRAINT daily_usage_count_check
+            CHECK (request_count >= 0);
+    END IF;
+END $$;
+
+-- Add unique constraint for upsert support
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'daily_usage_username_request_date_key'
+          AND table_name = 'daily_usage'
+    ) THEN
+        ALTER TABLE daily_usage
+            ADD CONSTRAINT daily_usage_username_request_date_key
+            UNIQUE (username, request_date);
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_daily_usage_user_date ON daily_usage (username, request_date);
 
+
 -- ─────────────────────────────────────────────
--- 4. Report files — FK to users(username) + user_report(id)
+-- 4. Create report_files table (if not exists)
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS report_files (
     id              BIGSERIAL   PRIMARY KEY,
@@ -70,6 +146,37 @@ CREATE TABLE IF NOT EXISTS report_files (
     content_sha1    TEXT        NOT NULL DEFAULT '',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- If table already existed without FKs, add them
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'report_files_username_fkey'
+          AND table_name = 'report_files'
+    ) THEN
+        ALTER TABLE report_files
+            ADD CONSTRAINT report_files_username_fkey
+            FOREIGN KEY (username) REFERENCES users(username)
+            ON UPDATE CASCADE ON DELETE CASCADE;
+    END IF;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'report_files_report_id_fkey'
+          AND table_name = 'report_files'
+    ) THEN
+        ALTER TABLE report_files
+            ADD CONSTRAINT report_files_report_id_fkey
+            FOREIGN KEY (report_id) REFERENCES user_report(id)
+            ON DELETE CASCADE;
+    END IF;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_report_files_user   ON report_files (username);
 CREATE INDEX IF NOT EXISTS idx_report_files_report ON report_files (report_id);
@@ -87,18 +194,23 @@ ALTER TABLE user_report  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_usage  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE report_files ENABLE ROW LEVEL SECURITY;
 
--- Service-role (backend) gets full access
-CREATE POLICY "service_role_users"       ON users       FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_user_report" ON user_report FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_daily_usage" ON daily_usage FOR ALL USING (true) WITH CHECK (true);
+-- Service-role (backend) gets full access — DROP first to avoid duplicates
+DROP POLICY IF EXISTS "service_role_users"        ON users;
+DROP POLICY IF EXISTS "service_role_user_report"  ON user_report;
+DROP POLICY IF EXISTS "service_role_daily_usage"  ON daily_usage;
+DROP POLICY IF EXISTS "service_role_report_files" ON report_files;
+
+CREATE POLICY "service_role_users"        ON users        FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_user_report"  ON user_report  FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_daily_usage"  ON daily_usage  FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_report_files" ON report_files FOR ALL USING (true) WITH CHECK (true);
 
 
 -- ─────────────────────────────────────────────
--- 6. ACID-safe functions (run inside a single transaction)
+-- 6. ACID-safe PL/pgSQL functions
 -- ─────────────────────────────────────────────
 
--- 6a. Atomic daily usage increment (upsert + return in one transaction)
+-- 6a. Atomic daily usage increment
 CREATE OR REPLACE FUNCTION increment_daily_usage(
     p_username TEXT,
     p_limit    INTEGER DEFAULT 5
@@ -110,7 +222,6 @@ DECLARE
     v_count   INTEGER;
     v_allowed BOOLEAN;
 BEGIN
-    -- Upsert: insert or increment atomically (no race conditions)
     INSERT INTO daily_usage (username, request_date, request_count, updated_at)
     VALUES (p_username, CURRENT_DATE, 1, now())
     ON CONFLICT (username, request_date)
@@ -121,7 +232,6 @@ BEGIN
 
     v_allowed := v_count <= p_limit;
 
-    -- If we incremented past the limit, roll it back
     IF NOT v_allowed THEN
         UPDATE daily_usage
         SET request_count = request_count - 1, updated_at = now()
@@ -139,7 +249,7 @@ BEGIN
 END;
 $$;
 
--- 6b. Atomic report save + file metadata (transactional)
+-- 6b. Atomic report save (transactional)
 CREATE OR REPLACE FUNCTION save_report_with_files(
     p_username        TEXT,
     p_research_topic  TEXT,
@@ -152,7 +262,6 @@ AS $$
 DECLARE
     v_report_id BIGINT;
 BEGIN
-    -- Verify user exists (FK will catch this too, but explicit error is clearer)
     IF NOT EXISTS (SELECT 1 FROM users WHERE username = p_username) THEN
         RAISE EXCEPTION 'User % does not exist', p_username;
     END IF;
@@ -171,11 +280,11 @@ BEGIN
 END;
 $$;
 
--- 6c. Get daily usage (read-only, consistent snapshot)
+-- 6c. Get daily usage (read-only)
 CREATE OR REPLACE FUNCTION get_daily_usage(p_username TEXT, p_limit INTEGER DEFAULT 5)
 RETURNS JSONB
 LANGUAGE plpgsql
-STABLE  -- marks as read-only for optimizer
+STABLE
 AS $$
 DECLARE
     v_count INTEGER;
@@ -215,7 +324,6 @@ AS $$
 DECLARE
     v_file_id BIGINT;
 BEGIN
-    -- Verify report belongs to this user
     IF NOT EXISTS (
         SELECT 1 FROM user_report
         WHERE id = p_report_id AND user_name = p_username
@@ -223,7 +331,6 @@ BEGIN
         RAISE EXCEPTION 'Report % does not belong to user %', p_report_id, p_username;
     END IF;
 
-    -- Upsert: replace existing file of same type for same report
     INSERT INTO report_files (username, report_id, file_type, file_name, b2_file_id, b2_file_path, file_size, content_sha1)
     VALUES (p_username, p_report_id, p_file_type, p_file_name, p_b2_file_id, p_b2_file_path, p_file_size, p_content_sha1)
     ON CONFLICT (report_id, file_type)
@@ -247,7 +354,7 @@ $$;
 
 
 -- ─────────────────────────────────────────────
--- 7. Updated_at auto-trigger (for any table that has it)
+-- 7. Auto updated_at trigger
 -- ─────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER
@@ -259,6 +366,15 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_daily_usage_updated_at ON daily_usage;
 CREATE TRIGGER trg_daily_usage_updated_at
     BEFORE UPDATE ON daily_usage
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+
+-- ─────────────────────────────────────────────
+-- Done! Verify with:
+--   SELECT conname FROM pg_constraint WHERE conrelid = 'user_report'::regclass;
+--   SELECT conname FROM pg_constraint WHERE conrelid = 'daily_usage'::regclass;
+--   SELECT conname FROM pg_constraint WHERE conrelid = 'report_files'::regclass;
+-- ─────────────────────────────────────────────
