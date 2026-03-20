@@ -78,6 +78,9 @@ export const authApi = {
       '/google_auth',
       { method: 'POST', body: JSON.stringify({ code }) }
     ),
+
+  getGoogleAuthUrl: () => 
+    request<{ success: boolean; url?: string; message?: string }>('/google_auth_url', { method: 'GET' }),
 };
 
 // ─── Decision Workflow ────────────────────────

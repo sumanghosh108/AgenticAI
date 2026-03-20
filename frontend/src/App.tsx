@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Layout } from '@/components/layout/Layout';
 import { LoginPage } from '@/pages/Auth/LoginPage';
@@ -10,7 +10,8 @@ import { MetricsPage } from '@/pages/Metrics/MetricsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!isAuthenticated) return <Navigate to={`/login${location.search}`} replace />;
   return <>{children}</>;
 }
 

@@ -13,6 +13,7 @@ from research_and_analyst.database.db_config import (
 )
 from research_and_analyst.auth.google_oauth import (
     is_google_oauth_configured, exchange_code_for_user,
+    get_google_auth_url,
 )
 from research_and_analyst.logger import GLOBAL_LOGGER as log
 
@@ -111,6 +112,13 @@ async def login(req: LoginRequest):
 
 class GoogleAuthRequest(BaseModel):
     code: str = Field(..., description="Authorization code from Google OAuth redirect")
+
+
+@api_router.get("/google_auth_url")
+async def get_google_auth_url_endpoint():
+    if not is_google_oauth_configured():
+        return {"success": False, "message": "Google OAuth is not configured on the server."}
+    return {"success": True, "url": get_google_auth_url()}
 
 
 @api_router.post("/google_auth")
