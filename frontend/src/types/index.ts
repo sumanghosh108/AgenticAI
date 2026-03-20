@@ -134,6 +134,8 @@ export interface WSMessage {
     agents?: AgentInfo[];
     total_agents?: number;
     completed_agents?: number;
+    query?: string;
+    domain?: string;
   };
   timestamp: number;
 }

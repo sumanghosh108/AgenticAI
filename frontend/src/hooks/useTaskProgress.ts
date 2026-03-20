@@ -12,6 +12,8 @@ export interface TaskProgress {
   result: Record<string, unknown> | null;
   isRunning: boolean;
   isComplete: boolean;
+  query?: string;
+  domain?: string;
   agents: AgentInfo[];
   totalAgents: number;
   completedAgents: number;
@@ -27,6 +29,8 @@ export function useTaskProgress(taskId: string | null) {
     result: null,
     isRunning: false,
     isComplete: false,
+    query: '',
+    domain: '',
     agents: [],
     totalAgents: 0,
     completedAgents: 0,
@@ -44,6 +48,8 @@ export function useTaskProgress(taskId: string | null) {
           status: msg.status || 'running',
           step: msg.step || prev.step,
           progress: msg.progress_pct || prev.progress,
+          query: msg.details?.query || prev.query,
+          domain: msg.details?.domain || prev.domain,
           isRunning: true,
           isComplete: false,
           agents: msg.details?.agents || prev.agents,
@@ -87,6 +93,8 @@ export function useTaskProgress(taskId: string | null) {
           status: info.status || prev.status,
           step: info.current_step || prev.step,
           progress: info.progress_pct ?? prev.progress,
+          query: info.query || prev.query,
+          domain: info.domain || prev.domain,
           error: info.error || null,
           isRunning: info.status === 'running' || info.status === 'queued',
           isComplete: info.status === 'completed' || info.status === 'failed',
@@ -117,6 +125,8 @@ export function useTaskProgress(taskId: string | null) {
       result: null,
       isRunning: true,
       isComplete: false,
+      query: '',
+      domain: '',
       agents: [],
       totalAgents: 0,
       completedAgents: 0,

@@ -7,9 +7,10 @@ import { Button } from '@/components/common/Button';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { useTaskProgress } from '@/hooks/useTaskProgress';
-import { decisionApi, feedbackApi } from '@/api/client';
+import { decisionApi, feedbackApi, reportHistoryApi } from '@/api/client';
 import type { AgentInfo } from '@/types';
 import ReactMarkdown from 'react-markdown';
+import { useAuth } from '@/context/AuthContext';
 
 const STEP_LABELS: Record<string, string> = {
   decompose_task: 'Decomposing query into sub-tasks',
@@ -82,6 +83,7 @@ export function AnalysisPage() {
   const [params] = useSearchParams();
   const taskId = params.get('task_id');
   const navigate = useNavigate();
+  const { user } = useAuth();
   const progress = useTaskProgress(taskId);
 
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
@@ -91,12 +93,26 @@ export function AnalysisPage() {
 
   // Fetch result when complete
   useEffect(() => {
-    if (progress.isComplete && taskId && progress.status === 'completed') {
+    if (progress.isComplete && taskId && progress.status === 'completed' && !result) {
       decisionApi.getResult(taskId).then((r) => {
-        if (r.success) setResult(r as Record<string, unknown>);
+        if (r.success) {
+          setResult(r as Record<string, unknown>);
+          
+          // Auto-save to database so it shows on Dashboard
+          if (user?.username && progress.query) {
+             reportHistoryApi.saveReport({
+               user_name: user.username,
+               research_topic: progress.query,
+               research_domain: progress.domain || 'general',
+               document: (r.final_output as string) || 'Report generated. Content missing.',
+             }).catch(() => {
+               console.error('Failed to auto-save report');
+             });
+          }
+        }
       });
     }
-  }, [progress.isComplete, progress.status, taskId]);
+  }, [progress.isComplete, progress.status, taskId, progress.query, progress.domain, user?.username, result]);
 
   const submitFeedback = async () => {
     if (!taskId || rating === 0) return;
