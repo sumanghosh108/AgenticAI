@@ -34,14 +34,25 @@ SALT = os.getenv("PASSWORD_SALT", "agenticai_salt_2026")
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using SHA-256 with a salt."""
-    salted = f"{SALT}{password}"
-    return hashlib.sha256(salted.encode("utf-8")).hexdigest()
+    """Hash a password using PBKDF2-HMAC-SHA256 (computationally expensive)."""
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        SALT.encode("utf-8"),
+        100000
+    ).hex()
+    return f"v2${digest}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a stored hash."""
-    return hash_password(plain_password) == hashed_password
+    if hashed_password.startswith("v2$"):
+        return hash_password(plain_password) == hashed_password
+        
+    # Legacy SHA-256 fallback for backwards compatibility
+    legacy_salted = f"{SALT}{plain_password}"
+    legacy_hash = hashlib.sha256(legacy_salted.encode("utf-8")).hexdigest()
+    return legacy_hash == hashed_password
 
 
 # ─────────────────────────────────────────────
