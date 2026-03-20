@@ -132,21 +132,7 @@ export function MetricsPage() {
           </Card>
         </div>
 
-        {/* Raw Metrics */}
-        {metrics?.metrics && (
-          <Card title="Raw System Counters">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.entries(
-                (metrics.metrics as Record<string, unknown>)?.counters as Record<string, number> || {}
-              ).map(([key, value]) => (
-                <div key={key} className="flex justify-between items-center py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate mr-4">{key}</span>
-                  <span className="text-sm font-semibold">{String(value)}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
+
       </div>
     </div>
   );
