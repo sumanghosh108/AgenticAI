@@ -81,7 +81,7 @@ def exchange_code_for_user(code: str) -> dict:
         scope=SCOPES,
     )
 
-    token = oauth.fetch_token(
+    oauth.fetch_token(
         TOKEN_URL,
         code=code,
         client_secret=_get_client_secret(),

@@ -339,7 +339,7 @@ class DecisionWorkflowBuilder:
         )
 
         loop = IterativeRefinementLoop(llm=self.llm, config=RefinementConfig(max_iterations=1))
-        result = loop.run(content, critique_fn=lambda _: critique)
+        loop.run(content, critique_fn=lambda _: critique)
 
         # Re-generate decision with improved context
         improved_decision = self.decision_maker.decide(
@@ -424,10 +424,9 @@ class DecisionWorkflowBuilder:
         markdown = self.report_formatter.to_markdown(report, title=title)
 
         # Save files
-        md_path = self.report_formatter.save_markdown(markdown)
-        pdf_path = ""
+        self.report_formatter.save_markdown(markdown)
         try:
-            pdf_path = self.report_formatter.to_pdf(report, title=title)
+            self.report_formatter.to_pdf(report, title=title)
         except Exception as e:
             log.warning("PDF generation failed", error=str(e))
 

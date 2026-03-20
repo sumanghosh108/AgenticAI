@@ -76,7 +76,7 @@ class DataAnalyzerTool:
 
     def analyze_csv(self, csv_content: str, analysis_prompt: str) -> AnalysisResult:
         """Quick analysis of CSV data: load + describe."""
-        code = f"""
+        code = """
 import pandas as pd
 import io
 
@@ -86,11 +86,11 @@ print("\\nColumns:", list(df.columns))
 print("\\nData Types:\\n", df.dtypes.to_string())
 print("\\nDescriptive Statistics:\\n", df.describe().to_string())
 print("\\nMissing Values:\\n", df.isnull().sum().to_string())
-result = {{
+result = {
     "shape": list(df.shape),
     "columns": list(df.columns),
     "summary": df.describe().to_dict(),
-}}
+}
 """
         return self.analyze(code, {"csv_data": csv_content})
 
