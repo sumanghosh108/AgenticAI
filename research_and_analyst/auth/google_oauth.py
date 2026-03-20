@@ -1,10 +1,10 @@
 """
-Google OAuth 2.0 helper for Streamlit.
+Google OAuth 2.0 helper.
 
 Flow:
   1. User clicks "Continue with Google"
   2. Generates Google OAuth URL → user redirected to Google consent screen
-  3. Google redirects back to Streamlit with ?code=xxx
+  3. Google redirects back to the frontend with ?code=xxx
   4. Exchange code for token → fetch user profile (email, name)
   5. Auto-create or login the user in our database
 """
@@ -39,7 +39,7 @@ def _get_client_secret() -> str:
 
 
 def _get_redirect_uri() -> str:
-    return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501")
+    return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000")
 
 
 def is_google_oauth_configured() -> bool:

@@ -1,8 +1,9 @@
 """
-Prompt templates for the Autonomous Research Report Generator.
+Prompt templates for the Autonomous Research Report Generator
+and Multi-Step Decision System.
 
 Each constant is a multi-line string template consumed by LLM-calling
-nodes in the interview and report-generation workflows.
+nodes in the interview, report-generation, and decision workflows.
 """
 
 # ─────────────────────────────────────────────────────────────────────
@@ -139,4 +140,54 @@ The conclusion should:
 - Suggest areas for further research or next steps.
 - Be approximately 200–300 words.
 - Use markdown formatting.
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Decision System Prompts
+# ─────────────────────────────────────────────────────────────────────
+
+TASK_DECOMPOSITION_SYSTEM_PROMPT = """\
+You are a strategic task planner for a multi-agent AI decision system.
+Your role is to break complex queries into atomic, executable sub-tasks.
+Each task must specify which agent handles it and what tools it needs.
+Ensure proper dependency ordering so independent tasks can run in parallel.
+"""
+
+DECISION_SYSTEM_PROMPT = """\
+You are a decision engine that produces structured, actionable decisions.
+You evaluate multi-dimensional scoring rubrics and produce quantified
+confidence levels. Your decisions must be grounded in data, cite sources,
+and consider both upside potential and downside risks.
+"""
+
+CRITIC_SYSTEM_PROMPT = """\
+You are an AI auditor responsible for evaluating the quality, accuracy,
+and reliability of AI-generated analysis. You apply Chain-of-Verification
+(CoVe) methodology: first identify claims, then verify each against
+available evidence, and finally score the overall output quality.
+"""
+
+REFINEMENT_SYSTEM_PROMPT = """\
+You are an expert editor and analyst. Given content and structured critique
+feedback, your job is to improve the content by addressing identified issues,
+implementing suggestions, and strengthening weak areas while preserving
+the original intent and structure.
+"""
+
+ENTERPRISE_REPORT_PROMPT = """\
+You are a senior business analyst producing an enterprise-grade report.
+
+Structure your output as:
+1. **Executive Summary** — 2-3 paragraph overview for C-suite
+2. **Key Insights** — bulleted findings with supporting data
+3. **Risk Assessment** — categorized risks with likelihood and impact
+4. **Recommendations** — prioritized, actionable next steps with owners
+5. **KPIs** — relevant metrics with current values and targets
+6. **Source Assessment** — credibility ratings for all sources used
+
+Topic: {topic}
+Domain: {domain}
+Analysis Data:
+{analysis_data}
 """

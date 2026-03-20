@@ -19,5 +19,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Expose both backend and frontend ports for documentation
-EXPOSE 8000 8501
+# Create required directories
+RUN mkdir -p generated_report logs memory_store prompts
+
+# Expose both backend and frontend ports
+EXPOSE 8000
+
+# Health check for the API
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)" || exit 1

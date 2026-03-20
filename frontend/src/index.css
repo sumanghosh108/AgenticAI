@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-600;
+  }
+}
+
+@layer components {
+  .prose {
+    @apply leading-relaxed;
+  }
+
+  .prose h1 {
+    @apply text-2xl font-bold mt-6 mb-3;
+  }
+
+  .prose h2 {
+    @apply text-xl font-semibold mt-5 mb-2;
+  }
+
+  .prose h3 {
+    @apply text-lg font-semibold mt-4 mb-2;
+  }
+
+  .prose p {
+    @apply mb-3;
+  }
+
+  .prose ul, .prose ol {
+    @apply ml-5 mb-3;
+  }
+
+  .prose ul {
+    @apply list-disc;
+  }
+
+  .prose ol {
+    @apply list-decimal;
+  }
+
+  .prose li {
+    @apply mb-1;
+  }
+
+  .prose code {
+    @apply bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm;
+  }
+
+  .prose pre {
+    @apply bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto mb-3;
+  }
+
+  .prose pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-brand-300 dark:border-brand-700 pl-4 italic text-gray-600 dark:text-gray-400 mb-3;
+  }
+
+  .prose table {
+    @apply w-full border-collapse mb-3;
+  }
+
+  .prose th {
+    @apply bg-gray-50 dark:bg-gray-800 font-semibold text-left p-2 border border-gray-200 dark:border-gray-700;
+  }
+
+  .prose td {
+    @apply p-2 border border-gray-200 dark:border-gray-700;
+  }
+}

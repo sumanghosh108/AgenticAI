@@ -16,9 +16,16 @@ ddgs
 structlog
 langchain_groq
 fastapi
-streamlit
 psycopg2-binary
 fpdf2
 markdown
 uvicorn
 requests_oauthlib
+beautifulsoup4
+ddgs
+chromadb
+PyMuPDF
+pdfplumber
+pandas
+numpy
+websockets

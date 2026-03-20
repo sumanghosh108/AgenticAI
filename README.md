@@ -23,7 +23,7 @@ This transforms a multi-day research process into a task that takes only minutes
 - **LLM Providers:** OpenRouter, Google GenAI, OpenAI, Groq
 - **Search & Tools:** Tavily API, Wikipedia, DuckDuckGo (ddgs), YouTube Search, yfinance
 - **Backend API:** FastAPI, Uvicorn
-- **Frontend UI:** Streamlit
+- **Frontend UI:** React 18 + TypeScript + Vite + Tailwind CSS
 - **Database:** PostgreSQL (with `psycopg2-binary`)
 - **Document Generation:** FPDF2, Markdown
 - **Authentication:** Google OAuth (`requests_oauthlib`)
@@ -35,7 +35,7 @@ This transforms a multi-day research process into a task that takes only minutes
 
 ```mermaid
 graph TD
-    A[User Enters Topic in Streamlit UI] -->|HTTP POST| B[FastAPI Backend]
+    A[User Enters Topic in React UI] -->|HTTP POST| B[FastAPI Backend]
     B --> C[LangGraph Pipeline Starts]
     C --> D[Create Analyst & Perspectives]
     D --> E[Conduct Multi-Turn Interviews]
@@ -48,7 +48,7 @@ graph TD
 ```
 
 ### Workflow Steps:
-1. **Input:** The user logs in via the Streamlit frontend and submits a research topic.
+1. **Input:** The user logs in via the React frontend and submits a research topic.
 2. **Analyst Creation:** The system generates analytical personas tailored to the topic.
 3. **Interview/Research:** The generated analysts perform autonomous web searches (Tavily) and interview simulations to gather deep insights.
 4. **Drafting:** The system drafts the Introduction, Body, and Conclusion based on the gathered data.
@@ -90,9 +90,9 @@ graph TD
    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-7. **Run the Streamlit Frontend (In a new terminal):**
+7. **Run the React Frontend (In a new terminal):**
    ```bash
-   streamlit run research_and_analyst/streamlit_app.py --server.port 8501
+   cd frontend && npm install && npm run dev
    ```
 
 ### Option 2: Docker Build Process
@@ -106,7 +106,7 @@ The easiest way to run the entire stack (Database, Backend API, Frontend UI) is 
    docker-compose up -d --build
    ```
 4. **Access the application:**
-   - **Frontend UI:** `http://localhost:8501`
+   - **Frontend UI:** `http://localhost:3000`
    - **Backend API Docs:** `http://localhost:8000/docs`
 
 ---
@@ -135,7 +135,7 @@ LLM_PROVIDER="openrouter" # Choose between: openrouter, openai, groq, gemini
 # Docker setup URL format (matches docker-compose.yml)
 DATABASE_URL="postgresql://postgres:password@db:5432/AgenticAI"
 
-# API Base URL (For Streamlit to communicate with FastAPI)
+# API Base URL (For frontend to communicate with FastAPI)
 # Local setup:
 # API_BASE_URL="http://localhost:8000/api"
 # Docker setup:
@@ -144,14 +144,14 @@ API_BASE_URL="http://api:8000/api"
 # Google OAuth Settings (Required for Login)
 GOOGLE_CLIENT_ID="your_google_client_id"
 GOOGLE_CLIENT_SECRET="your_google_client_secret"
-GOOGLE_REDIRECT_URI="http://localhost:8501"
+GOOGLE_REDIRECT_URI="http://localhost:3000"
 ```
 
 ---
 
 ## Google Auth Process
 
-AgenticAI uses Google OAuth 2.0 to securely authenticate users via the Streamlit frontend. Here is how to set it up and how it works:
+AgenticAI uses Google OAuth 2.0 to securely authenticate users via the React frontend. Here is how to set it up and how it works:
 
 ### Setup Steps for Google Cloud Console:
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
@@ -159,14 +159,14 @@ AgenticAI uses Google OAuth 2.0 to securely authenticate users via the Streamlit
 3. Navigate to **APIs & Services > Credentials**.
 4. Click **Create Credentials > OAuth client ID**.
 5. Select **Web application** as the Application type.
-6. Under **Authorized readirect URIs**, add your frontend URL exactly as it runs (e.g., `http://localhost:8501`).
+6. Under **Authorized redirect URIs**, add your frontend URL exactly as it runs (e.g., `http://localhost:3000`).
 7. Copy the generated **Client ID** and **Client Secret** and add them to your `.env` file:
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_REDIRECT_URI="http://localhost:8501"`
+   - `GOOGLE_REDIRECT_URI="http://localhost:3000"`
 
 ### How Authentication Works in the App:
-1. **Login Trigger:** When a user clicks "Login with Google" on the Streamlit UI, the `research_and_analyst/auth/google_oauth.py` module generates an authorization URL and redirects the user to Google's consent screen.
-2. **Callback Handling:** After the user approves, Google redirects back to `http://localhost:8501` with an authorization code.
-3. **Token Exchange:** The Streamlit app captures this code and exchanges it for a secure access token.
-4. **Session Management:** The user's Google profile information (email, name) is fetched, an account is created/verified in the internal PostgreSQL database, and their session state (`logged_in = True`) is set to grant access to the dashboard.
+1. **Login Trigger:** When a user clicks "Login with Google" on the React UI, the `research_and_analyst/auth/google_oauth.py` module generates an authorization URL and redirects the user to Google's consent screen.
+2. **Callback Handling:** After the user approves, Google redirects back to `http://localhost:3000` with an authorization code.
+3. **Token Exchange:** The frontend captures this code and sends it to the backend API to exchange for a secure access token.
+4. **Session Management:** The user's Google profile information (email, name) is fetched, an account is created/verified in the internal PostgreSQL database, and a JWT token is returned to the frontend for authenticated API access.

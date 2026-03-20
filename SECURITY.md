@@ -13,7 +13,7 @@ AgenticAI is an actively developed application. We currently provide security up
 
 Security is a high priority for the AgenticAI project. We appreciate your help in disclosing any vulnerabilities you might find responsibly.
 
-If you discover a security vulnerability within AgenticAI (e.g., exposed API keys, prompt injection vulnerabilities, insecure database configurations, unauthorized access in Streamlit, etc.), please follow these steps:
+If you discover a security vulnerability within AgenticAI (e.g., exposed API keys, prompt injection vulnerabilities, insecure database configurations, unauthorized access in the frontend, etc.), please follow these steps:
 
 1.  **Raise a GitHub Issue.** Create a new issue describing the vulnerability, its potential impact, and clear steps to reproduce it.
 2.  **Submit a Pull Request (PR) with the Fix.** If you have solved the bug, please create a Pull Request against the `main` branch. Your PR must include:

@@ -32,28 +32,24 @@ services:
     env_file:
       - .env
     environment:
-      # Override DB URL to use internal docker network
       - DATABASE_URL=postgresql://postgres:password@db:5432/agenticai
       - API_BASE_URL=http://localhost:8000/api
+      - ENVIRONMENT=production
     volumes:
       - .:/app
+      - report_data:/app/generated_report
+      - memory_data:/app/memory_store
 
-  ui:
-    build: .
-    container_name: agenticai_ui
+  frontend:
+    build: ./frontend
+    container_name: agenticai_frontend
     restart: always
-    command: streamlit run research_and_analyst/streamlit_app.py --server.address 0.0.0.0 --server.port 8501
     ports:
-      - "8501:8501"
+      - "3000:3000"
     depends_on:
       - api
-    env_file:
-      - .env
-    environment:
-      # Streamlit makes backend calls; it needs to reach the 'api' container on port 8000 over the internal network
-      - API_BASE_URL=http://api:8000/api
-    volumes:
-      - .:/app
 
 volumes:
   postgres_data:
+  report_data:
+  memory_data:

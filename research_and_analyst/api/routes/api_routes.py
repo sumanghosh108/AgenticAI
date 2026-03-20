@@ -216,3 +216,266 @@ async def report_status(thread_id: str):
 async def download_report(file_name: str):
     service = _get_service()
     return service.download_file(file_name)
+
+
+# ─────────────────────────────────────────────
+# Decision Workflow Routes
+# ─────────────────────────────────────────────
+
+
+class DecisionRequest(BaseModel):
+    query: str = Field(..., description="Analysis query (e.g. 'Analyze AI startup market')")
+    domain: str = Field("general", description="Domain: finance, healthcare, general")
+    max_iterations: int = Field(3, ge=1, le=5, description="Max refinement iterations")
+
+
+class FeedbackSubmission(BaseModel):
+    task_id: str
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = ""
+
+
+# ─── Singletons ──────────────────────────────
+
+_decision_service = None
+_task_queue = None
+_rate_limiter = None
+_input_validator = None
+_feedback_store = None
+
+
+def _get_decision_service():
+    global _decision_service
+    if _decision_service is None:
+        from research_and_analyst.workflows.decision_workflow import DecisionWorkflowBuilder
+        _decision_service = DecisionWorkflowBuilder()
+        _decision_service.build()
+    return _decision_service
+
+
+def _get_task_queue():
+    global _task_queue
+    if _task_queue is None:
+        from research_and_analyst.job_queue.task_queue import TaskQueue
+        _task_queue = TaskQueue(max_workers=3)
+    return _task_queue
+
+
+def _get_rate_limiter():
+    global _rate_limiter
+    if _rate_limiter is None:
+        from research_and_analyst.security.protection import RateLimiter
+        _rate_limiter = RateLimiter(max_requests=30, window_seconds=60, burst_limit=5)
+    return _rate_limiter
+
+
+def _get_input_validator():
+    global _input_validator
+    if _input_validator is None:
+        from research_and_analyst.security.protection import InputValidator
+        _input_validator = InputValidator()
+    return _input_validator
+
+
+def _get_feedback_store():
+    global _feedback_store
+    if _feedback_store is None:
+        from research_and_analyst.evaluation.quality_tests import FeedbackStore
+        _feedback_store = FeedbackStore()
+    return _feedback_store
+
+
+# ─── Synchronous Analysis (blocking) ────────
+
+
+@api_router.post("/decision/analyze")
+async def run_decision_analysis(req: DecisionRequest):
+    """Run the full multi-step decision workflow (synchronous)."""
+    # Rate limiting
+    rate_check = _get_rate_limiter().check(req.query[:50])
+    if not rate_check["allowed"]:
+        return {
+            "success": False,
+            "message": f"Rate limit exceeded. Retry after {rate_check['retry_after']}s",
+            "retry_after": rate_check["retry_after"],
+        }
+
+    # Input validation + prompt injection check
+    validation = _get_input_validator().validate_query(req.query)
+    if not validation["valid"]:
+        return {"success": False, "message": "Invalid input", "errors": validation["errors"]}
+
+    try:
+        service = _get_decision_service()
+        result = service.run(
+            query=validation["sanitized_query"],
+            domain=req.domain,
+            max_iterations=req.max_iterations,
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        log.error("Decision analysis failed", error=str(e))
+        return {"success": False, "message": str(e)}
+
+
+# ─── Async Analysis (queue-based) ───────────
+
+
+@api_router.post("/decision/analyze/async")
+async def run_decision_async(req: DecisionRequest):
+    """Submit analysis for async execution. Returns task_id for polling."""
+    # Rate limiting
+    rate_check = _get_rate_limiter().check(req.query[:50])
+    if not rate_check["allowed"]:
+        return {
+            "success": False,
+            "message": f"Rate limit exceeded. Retry after {rate_check['retry_after']}s",
+        }
+
+    # Input validation
+    validation = _get_input_validator().validate_query(req.query)
+    if not validation["valid"]:
+        return {"success": False, "message": "Invalid input", "errors": validation["errors"]}
+
+    try:
+        service = _get_decision_service()
+        queue = _get_task_queue()
+
+        task_id = queue.submit(
+            func=service.run,
+            query=validation["sanitized_query"],
+            domain=req.domain,
+            max_iterations=req.max_iterations,
+        )
+
+        return {
+            "success": True,
+            "task_id": task_id,
+            "message": "Analysis submitted. Poll /decision/status/{task_id} for progress.",
+        }
+    except Exception as e:
+        log.error("Async submission failed", error=str(e))
+        return {"success": False, "message": str(e)}
+
+
+@api_router.get("/decision/status/{task_id}")
+async def get_task_status(task_id: str):
+    """Poll task progress and status."""
+    queue = _get_task_queue()
+    status = queue.get_status(task_id)
+    if not status:
+        return {"success": False, "message": "Task not found"}
+    return {"success": True, **status}
+
+
+@api_router.get("/decision/result/{task_id}")
+async def get_task_result(task_id: str):
+    """Get completed task result."""
+    queue = _get_task_queue()
+    result = queue.get_result(task_id)
+    if not result:
+        return {"success": False, "message": "Task not found"}
+    return {"success": True, **result}
+
+
+@api_router.post("/decision/cancel/{task_id}")
+async def cancel_task(task_id: str):
+    """Cancel a queued or running task."""
+    queue = _get_task_queue()
+    cancelled = queue.cancel(task_id)
+    return {"success": cancelled, "message": "Cancelled" if cancelled else "Cannot cancel"}
+
+
+@api_router.get("/decision/tasks")
+async def list_tasks():
+    """List all tasks."""
+    queue = _get_task_queue()
+    return {"success": True, "tasks": queue.list_tasks()}
+
+
+# ─── Feedback ────────────────────────────────
+
+
+@api_router.post("/decision/feedback")
+async def submit_quality_feedback(req: FeedbackSubmission):
+    """Submit human feedback on a task output."""
+    store = _get_feedback_store()
+    feedback_id = store.submit(
+        task_id=req.task_id,
+        rating=req.rating,
+        comment=req.comment,
+    )
+    return {"success": True, "feedback_id": feedback_id}
+
+
+@api_router.get("/decision/feedback/stats")
+async def get_feedback_stats():
+    """Get aggregate feedback statistics."""
+    store = _get_feedback_store()
+    return {"success": True, **store.get_stats()}
+
+
+# ─── Domain Packs ────────────────────────────
+
+
+@api_router.get("/decision/domains")
+async def list_domains():
+    """List available domain packs."""
+    from research_and_analyst.domain_packs.finance_pack import FinanceDomainPack
+    from research_and_analyst.domain_packs.healthcare_pack import HealthcareDomainPack
+
+    packs = {
+        "finance": FinanceDomainPack().get_config().model_dump(),
+        "healthcare": HealthcareDomainPack().get_config().model_dump(),
+        "general": {
+            "domain": "general",
+            "display_name": "General Analysis",
+            "tools": ["web_search", "web_scraper", "data_analyzer"],
+            "metrics": ["feasibility", "impact", "risk"],
+            "scoring_dimensions": ["feasibility", "impact_potential", "risk_level", "data_quality", "strategic_alignment"],
+        },
+    }
+    return {"success": True, "domains": packs}
+
+
+# ─── Observability & Metrics ─────────────────
+
+
+@api_router.get("/decision/metrics")
+async def get_system_metrics():
+    """Get system observability metrics."""
+    from research_and_analyst.observability.tracing import GLOBAL_METRICS, GLOBAL_AUDIT
+
+    metrics = GLOBAL_METRICS.get_all_metrics()
+    audit_count = GLOBAL_AUDIT.count()
+
+    # Add task queue stats
+    queue = _get_task_queue()
+    tasks = queue.list_tasks(limit=100)
+    task_stats = {
+        "total_tasks": len(tasks),
+        "by_status": {},
+    }
+    for t in tasks:
+        status = t["status"]
+        task_stats["by_status"][status] = task_stats["by_status"].get(status, 0) + 1
+
+    return {
+        "success": True,
+        "metrics": metrics,
+        "audit_entries": audit_count,
+        "task_stats": task_stats,
+        "feedback_stats": _get_feedback_store().get_stats(),
+    }
+
+
+@api_router.get("/decision/prompts")
+async def list_prompt_versions():
+    """List available prompt versions for A/B testing."""
+    from research_and_analyst.reliability.prompt_manager import PromptManager
+    pm = PromptManager()
+    versions = pm.list_versions()
+    result = {}
+    for v in versions:
+        result[v] = pm.list_prompts(v)
+    return {"success": True, "versions": result}
