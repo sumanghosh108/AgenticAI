@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 const STEP_LABELS: Record<string, string> = {
   decompose_task: 'Decomposing query into sub-tasks',
   dispatch_agents: 'Agents researching & analyzing',
+  cross_verify: 'Cross-verifying claims across sources',
   generate_decision: 'Generating structured decision',
   critique_output: 'Multi-critic quality evaluation',
   refine_output: 'Refining based on critique',
@@ -28,6 +29,7 @@ const STEP_LABELS: Record<string, string> = {
 const STEP_ORDER = [
   'decompose_task',
   'dispatch_agents',
+  'cross_verify',
   'generate_decision',
   'critique_output',
   'extract_kpis',

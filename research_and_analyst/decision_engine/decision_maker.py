@@ -17,12 +17,21 @@ from research_and_analyst.logger import GLOBAL_LOGGER as log
 DECISION_PROMPT = """\
 You are a decision engine that produces structured, actionable decisions.
 
+## STRICT CONTEXT RULES (MANDATORY)
+- You MUST base your decision ONLY on the agent research outputs provided below.
+- Do NOT use prior knowledge or training data to fill gaps.
+- Every reason and risk MUST trace back to a specific finding in the agent outputs.
+- If the agent outputs lack data for a scoring dimension, score it 0.3 and state "Insufficient data from sources".
+- If claims are marked as [SINGLE SOURCE] or [INFERENCE], reflect lower confidence.
+
 ## Input
 Query: {query}
 Domain: {domain}
 
 ## Agent Research Outputs
 {agent_outputs}
+
+{verification_summary}
 
 ## Constraints
 {constraints}
@@ -32,7 +41,7 @@ Evaluate on these dimensions (score each 0.0 to 1.0):
 {scoring_dimensions}
 
 ## Instructions
-Based on the research outputs and scoring rubric, produce a structured decision.
+Based ONLY on the research outputs above and scoring rubric, produce a structured decision.
 
 Return VALID JSON matching this schema exactly:
 {{
@@ -52,7 +61,8 @@ Rules:
 - Confidence is the weighted average of scoring dimensions.
 - Include at least 3 reasons and 2 risks.
 - Consider at least 2 alternatives.
-- Be specific and data-driven in your reasoning.
+- Be specific and data-driven in your reasoning — cite the agent output that supports each point.
+- Lower your confidence if many claims are weakly supported or unverified.
 
 Return ONLY the JSON.
 """
@@ -96,6 +106,7 @@ class DecisionMaker:
         domain: str = "general",
         constraints: Optional[List[str]] = None,
         custom_rubric: Optional[List[str]] = None,
+        verification_summary: str = "",
     ) -> Decision:
         """
         Generate a structured decision.
@@ -106,6 +117,7 @@ class DecisionMaker:
             domain: Domain context.
             constraints: Decision constraints.
             custom_rubric: Custom scoring dimensions (overrides domain default).
+            verification_summary: Cross-verification summary to include in prompt.
 
         Returns:
             Decision with confidence, reasons, risks, scoring.
@@ -123,6 +135,16 @@ class DecisionMaker:
         rubric_str = "\n".join(f"- {dim}" for dim in rubric)
         constraints_str = "\n".join(f"- {c}" for c in constraints_list)
 
+        # Format verification summary section
+        verification_section = ""
+        if verification_summary:
+            verification_section = (
+                f"## Cross-Verification Results\n"
+                f"{verification_summary}\n"
+                f"NOTE: Prioritize VERIFIED claims. Treat SINGLE SOURCE claims with caution. "
+                f"Ignore UNVERIFIED claims for decision-making."
+            )
+
         if not self.llm:
             return self._fallback_decision(query, agent_outputs, rubric)
 
@@ -130,6 +152,7 @@ class DecisionMaker:
             query=query,
             domain=domain,
             agent_outputs=outputs_str,
+            verification_summary=verification_section,
             constraints=constraints_str,
             scoring_dimensions=rubric_str,
         )

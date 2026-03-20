@@ -17,10 +17,14 @@ from research_and_analyst.logger import GLOBAL_LOGGER as log
 FACT_CHECK_PROMPT = """\
 You are a rigorous fact-checker. Analyze the following content and identify:
 
-1. **Verified Claims**: Statements that are supported by the provided sources.
-2. **Unverified Claims**: Statements that cannot be confirmed from the sources.
-3. **Potential Hallucinations**: Statements that appear fabricated or not grounded in evidence.
-4. **Missing Information**: Important aspects that should be covered but aren't.
+1. **Verified Claims**: Statements that are supported by the provided sources (require ≥2 independent sources for full verification).
+2. **Weakly Supported Claims**: Statements backed by only 1 source.
+3. **Unverified Claims**: Statements that cannot be confirmed from the sources.
+4. **Potential Hallucinations**: Statements that appear fabricated or not grounded in any provided evidence.
+5. **Missing Information**: Important aspects that should be covered but aren't.
+
+IMPORTANT: A claim is only "verified" if at least 2 independent sources support it.
+Claims from a single source should be marked as weakly supported.
 
 Content to evaluate:
 {content}
@@ -29,13 +33,14 @@ Sources used:
 {sources}
 
 Return your analysis as ONLY valid structured JSON with these fields:
-- score (0-10): overall factual accuracy
+- score (0-10): overall factual accuracy (penalize heavily for unsourced claims)
 - issues: list of specific problems found
 - suggestions: list of improvements
-- verified_claims: list of confirmed facts
+- verified_claims: list of confirmed facts (each backed by ≥2 sources)
 - unverified_claims: list of unconfirmed statements
 
 Do not include any conversational text or formatting outside the JSON block.
+"""
 
 BIAS_DETECTION_PROMPT = """\
 You are a bias detection specialist. Analyze the following content for:

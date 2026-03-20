@@ -51,6 +51,7 @@ from research_and_analyst.critique.quality_scorer import QualityScorer
 from research_and_analyst.business_intel.source_scorer import SourceReliabilityScorer
 from research_and_analyst.business_intel.kpi_extractor import KPIExtractor
 from research_and_analyst.business_intel.report_formatter import ReportFormatter
+from research_and_analyst.verification.cross_verifier import CrossVerifier
 from research_and_analyst.domain_packs.base_pack import BaseDomainPack
 from research_and_analyst.domain_packs.finance_pack import FinanceDomainPack
 from research_and_analyst.domain_packs.healthcare_pack import HealthcareDomainPack
@@ -99,6 +100,7 @@ class DecisionWorkflowBuilder:
         self.decision_maker = DecisionMaker(llm=self.llm)
         self.quality_scorer = QualityScorer(llm=self.llm)
         self.source_scorer = SourceReliabilityScorer()
+        self.cross_verifier = CrossVerifier(source_scorer=self.source_scorer)
         self.kpi_extractor = KPIExtractor(llm=self.llm)
         self.report_formatter = ReportFormatter()
 
@@ -257,11 +259,54 @@ class DecisionWorkflowBuilder:
 
         return {"agent_outputs": all_outputs, "status": "agents_completed"}
 
+    def cross_verify(self, state: DecisionGraphState) -> Dict[str, Any]:
+        """Node: Cross-verify claims across agent outputs. Filter low-credibility sources."""
+        agent_outputs = state.get("agent_outputs", [])
+
+        log.info("Running cross-verification", num_outputs=len(agent_outputs))
+
+        report = self.cross_verifier.verify(agent_outputs, llm=self.llm)
+
+        # Build verification summary for decision maker
+        summary = (
+            f"Claims analyzed: {report.total_claims}\n"
+            f"  - Verified (≥2 sources): {report.verified_claims}\n"
+            f"  - Weakly supported (1 source): {report.weakly_supported_claims}\n"
+            f"  - Unverified (0 credible sources): {report.unverified_claims}\n"
+            f"  - Verification rate: {report.verification_rate:.0%}\n"
+            f"  - Sources filtered (credibility < 0.5): {len(report.filtered_sources)}"
+        )
+
+        # Store in short-term memory
+        self.short_term.store(
+            "verification_report",
+            {
+                "total_claims": report.total_claims,
+                "verified": report.verified_claims,
+                "weak": report.weakly_supported_claims,
+                "unverified": report.unverified_claims,
+                "rate": report.verification_rate,
+                "filtered_sources": report.filtered_sources,
+            },
+            source="cross_verifier",
+            entry_type="verification",
+        )
+
+        log.info("Cross-verification complete", rate=report.verification_rate)
+
+        return {
+            "verification_report": report.model_dump(),
+            "verification_summary": summary,
+            "sources": report.credible_sources,  # Only credible sources go forward
+            "status": "cross_verified",
+        }
+
     def generate_decision(self, state: DecisionGraphState) -> Dict[str, Any]:
-        """Node: Generate structured decision from agent outputs."""
+        """Node: Generate structured decision from agent outputs (using verified claims only)."""
         query = state["query"]
         domain = state.get("domain", "general")
         agent_outputs = state.get("agent_outputs", [])
+        verification_summary = state.get("verification_summary", "")
 
         # Get domain-specific constraints and rubric
         domain_pack = DOMAIN_PACKS.get(domain)
@@ -278,6 +323,7 @@ class DecisionWorkflowBuilder:
             domain=domain,
             constraints=constraints,
             custom_rubric=rubric,
+            verification_summary=verification_summary,
         )
 
         self.short_term.store("decision", decision.model_dump(), source="decision_maker", entry_type="decision")
@@ -392,6 +438,7 @@ class DecisionWorkflowBuilder:
         agent_outputs = state.get("agent_outputs", [])
         kpis = state.get("kpis")
         sources = state.get("sources", [])
+        verification = state.get("verification_report")
 
         # Build executive summary from agent outputs
         summaries = []
@@ -400,6 +447,16 @@ class DecisionWorkflowBuilder:
             if output_text:
                 summaries.append(output_text[:500])
         exec_summary = " ".join(summaries)[:1500] if summaries else "Analysis complete."
+
+        # Add verification context to summary
+        if verification:
+            rate = verification.get("verification_rate", 0)
+            verified = verification.get("verified_claims", 0)
+            total = verification.get("total_claims", 0)
+            exec_summary += (
+                f"\n\n**Source Verification:** {verified} of {total} claims cross-verified "
+                f"across ≥2 independent sources ({rate:.0%} verification rate)."
+            )
 
         # Extract insights, risks, recommendations from decision
         key_insights = decision.reasons if decision else ["Analysis completed"]
@@ -478,6 +535,7 @@ class DecisionWorkflowBuilder:
         # Add nodes
         graph.add_node("decompose_task", self.decompose_task)
         graph.add_node("dispatch_agents", self.dispatch_agents)
+        graph.add_node("cross_verify", self.cross_verify)
         graph.add_node("generate_decision", self.generate_decision)
         graph.add_node("critique_output", self.critique_output)
         graph.add_node("refine_output", self.refine_output)
@@ -488,7 +546,8 @@ class DecisionWorkflowBuilder:
         # Define edges
         graph.set_entry_point("decompose_task")
         graph.add_edge("decompose_task", "dispatch_agents")
-        graph.add_edge("dispatch_agents", "generate_decision")
+        graph.add_edge("dispatch_agents", "cross_verify")
+        graph.add_edge("cross_verify", "generate_decision")
         graph.add_edge("generate_decision", "critique_output")
 
         # Conditional: refine or finalize
@@ -516,7 +575,8 @@ class DecisionWorkflowBuilder:
     # Step-to-progress mapping (approximate percentages)
     STEP_PROGRESS = {
         "decompose_task": 10.0,
-        "dispatch_agents": 45.0,
+        "dispatch_agents": 40.0,
+        "cross_verify": 52.0,
         "generate_decision": 60.0,
         "critique_output": 70.0,
         "refine_output": 75.0,
@@ -561,6 +621,8 @@ class DecisionWorkflowBuilder:
             "agent_outputs": [],
             "short_term_memory": {},
             "long_term_context": [],
+            "verification_report": None,
+            "verification_summary": "",
             "decision": None,
             "critiques": [],
             "aggregated_critique": None,

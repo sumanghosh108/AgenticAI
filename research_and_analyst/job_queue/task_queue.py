@@ -61,6 +61,7 @@ class TaskQueue:
     PIPELINE_STEPS = [
         "decompose_task",
         "dispatch_agents",
+        "cross_verify",
         "generate_decision",
         "critique_output",
         "extract_kpis",

@@ -18,7 +18,15 @@ RESEARCH_SYSTEM_PROMPT = """\
 You are a thorough research analyst. Given a research task and web search results,
 synthesize the information into a clear, factual analysis.
 
-Guidelines:
+## STRICT CONTEXT RULES (MANDATORY)
+- You MUST ONLY use information from the provided search results and scraped content below.
+- Do NOT use prior knowledge, training data, or make assumptions beyond what the sources say.
+- Every factual claim MUST cite a source URL from the provided results.
+- If the sources do not cover a topic, explicitly state "No data available from sources" — do NOT fill gaps with your own knowledge.
+- If sources conflict, present BOTH viewpoints with their respective URLs.
+- Clearly label any inference or analysis that goes beyond what sources directly state as "[INFERENCE]".
+
+## Output Guidelines
 - Ground your analysis in the provided search results and scraped content.
 - Cite sources by URL when making specific claims.
 - Distinguish between verified facts and inferences.
@@ -65,7 +73,7 @@ class ResearchAgent(BaseAgent):
         return queries[:n] if queries else [task]
 
     def execute(self, task: str, context: Optional[Dict[str, Any]] = None) -> AgentResult:
-        """Research a topic: generate queries → search → scrape top results → synthesize."""
+        """Research a topic: generate queries → hybrid search → scrape top results → synthesize."""
         ctx_str = context.get("additional_context", "") if context else ""
         sources_used = []
 
@@ -73,21 +81,22 @@ class ResearchAgent(BaseAgent):
         queries = self._generate_queries(task, ctx_str)
         log.info("Research queries generated", queries=queries)
 
-        # Step 2: Multi-search
-        search_results = self.search_tool.multi_search(queries, max_results=3)
+        # Step 2: Hybrid multi-search (Tavily + DuckDuckGo combined)
+        search_results = self.search_tool.multi_search(queries, max_results=5)
         search_context = "\n\n".join(
-            f"**{r.title}** ({r.url})\n{r.snippet}" for r in search_results
+            f"**{r.title}** ({r.url}) [source: {r.source}]\n{r.snippet}"
+            for r in search_results
         )
         sources_used = [r.url for r in search_results if r.url]
 
-        # Step 3: Scrape top 3 unique URLs for deeper content
-        top_urls = list(dict.fromkeys(r.url for r in search_results if r.url))[:3]
+        # Step 3: Scrape top 5 unique URLs for deeper content
+        top_urls = list(dict.fromkeys(r.url for r in search_results if r.url))[:5]
         scraped = self.scraper_tool.scrape_multiple(top_urls, max_chars=3000)
         scraped_context = "\n\n".join(
             f"--- Content from {s.url} ---\n{s.text[:2000]}" for s in scraped if s.success
         )
 
-        # Step 4: Synthesize with LLM
+        # Step 4: Synthesize with LLM (strict context constraining)
         if not self.llm:
             return AgentResult(
                 agent_name=self.name,
@@ -97,12 +106,17 @@ class ResearchAgent(BaseAgent):
                 sources_used=sources_used,
             )
 
+        # Context-constrained prompt with clear boundaries
         synthesis_prompt = (
             f"{RESEARCH_SYSTEM_PROMPT}\n\n"
             f"Research Task: {task}\n\n"
+            f"========== BEGIN PROVIDED CONTEXT (use ONLY this) ==========\n\n"
             f"Search Results:\n{search_context}\n\n"
             f"Detailed Content:\n{scraped_context}\n\n"
-            f"Provide a comprehensive research synthesis."
+            f"========== END PROVIDED CONTEXT ==========\n\n"
+            f"Based ONLY on the context above, provide a comprehensive research synthesis. "
+            f"Cite source URLs for every factual claim. "
+            f"If the context does not cover an aspect, say 'No data available from sources'."
         )
 
         response = self.llm.invoke([HumanMessage(content=synthesis_prompt)])
@@ -114,5 +128,13 @@ class ResearchAgent(BaseAgent):
             output=response.content,
             sources_used=sources_used,
             confidence=0.7,
-            structured_data={"queries": queries, "result_count": len(search_results)},
+            structured_data={
+                "queries": queries,
+                "result_count": len(search_results),
+                "sources_by_engine": {
+                    "tavily": sum(1 for r in search_results if "tavily" in r.source),
+                    "duckduckgo": sum(1 for r in search_results if "duckduckgo" in r.source),
+                    "both": sum(1 for r in search_results if "+" in r.source),
+                },
+            },
         )

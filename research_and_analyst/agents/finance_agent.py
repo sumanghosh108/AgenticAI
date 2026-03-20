@@ -18,7 +18,14 @@ FINANCE_SYSTEM_PROMPT = """\
 You are a senior financial analyst. Analyze the provided market data, financial
 metrics, and research to produce actionable investment intelligence.
 
-Guidelines:
+## STRICT CONTEXT RULES (MANDATORY)
+- You MUST base your analysis ONLY on the market data, computed metrics, and research findings provided below.
+- Do NOT use prior knowledge or training data to fill gaps.
+- Every metric and claim MUST reference the provided data or a source URL.
+- If data is missing for a metric, state "Data not available" — do NOT estimate.
+- Clearly label any projection or inference as "[INFERENCE]".
+
+## Output Guidelines
 - Use quantitative data to support your analysis.
 - Calculate or reference key metrics: ROI, EBITDA, P/E ratio, revenue growth, CAC, LTV.
 - Assess risk-reward profile clearly.
@@ -85,7 +92,7 @@ class FinanceAgent(BaseAgent):
             f"{task} market outlook 2025 2026",
             f"{task} investment risks opportunities",
         ]
-        search_results = self.search_tool.multi_search(search_queries, max_results=3)
+        search_results = self.search_tool.multi_search(search_queries, max_results=5)
         research_context = "\n\n".join(
             f"**{r.title}** ({r.url})\n{r.snippet}" for r in search_results
         )
@@ -129,14 +136,17 @@ print(json.dumps(metrics, indent=2))
         synthesis_prompt = (
             f"{FINANCE_SYSTEM_PROMPT}\n\n"
             f"Task: {task}\n\n"
+            f"========== BEGIN PROVIDED CONTEXT (use ONLY this) ==========\n\n"
             f"Market Data:\n{json.dumps(market_data, indent=2, default=str)}\n\n"
             f"Computed Metrics:\n{analysis_output}\n\n"
             f"Research Findings:\n{research_context}\n\n"
-            f"Provide a comprehensive financial analysis with:\n"
+            f"========== END PROVIDED CONTEXT ==========\n\n"
+            f"Based ONLY on the data above, provide a comprehensive financial analysis with:\n"
             f"1. Key metrics summary\n"
             f"2. Growth assessment\n"
             f"3. Risk analysis\n"
-            f"4. Investment recommendation with confidence level"
+            f"4. Investment recommendation with confidence level\n"
+            f"Cite source URLs for every claim."
         )
 
         response = self.llm.invoke([HumanMessage(content=synthesis_prompt)])

@@ -18,7 +18,14 @@ HEALTHCARE_SYSTEM_PROMPT = """\
 You are a healthcare and biotech research analyst. Analyze the provided clinical data,
 medical research, and market information to produce evidence-based insights.
 
-Guidelines:
+## STRICT CONTEXT RULES (MANDATORY)
+- You MUST base your analysis ONLY on the web research and documents provided below.
+- Do NOT use prior knowledge or training data to fill gaps.
+- Every claim about clinical data, regulatory status, or efficacy MUST cite a source URL.
+- If data is unavailable from sources, state "No data available from sources" — do NOT infer.
+- Clearly label any inference as "[INFERENCE]".
+
+## Output Guidelines
 - Prioritize peer-reviewed sources and clinical trial data.
 - Clearly distinguish between FDA-approved treatments and experimental ones.
 - Note regulatory status and approval timelines.
@@ -50,7 +57,7 @@ class HealthcareAgent(BaseAgent):
             f"{task} FDA approval regulatory",
             f"{task} market analysis healthcare",
         ]
-        search_results = self.search_tool.multi_search(search_queries, max_results=3)
+        search_results = self.search_tool.multi_search(search_queries, max_results=5)
         research_context = "\n\n".join(
             f"**{r.title}** ({r.url})\n{r.snippet}" for r in search_results
         )
@@ -78,14 +85,17 @@ class HealthcareAgent(BaseAgent):
         synthesis_prompt = (
             f"{HEALTHCARE_SYSTEM_PROMPT}\n\n"
             f"Research Task: {task}\n\n"
+            f"========== BEGIN PROVIDED CONTEXT (use ONLY this) ==========\n\n"
             f"Web Research:\n{research_context}\n\n"
             f"Document Analysis:\n{doc_context}\n\n"
-            f"Provide a comprehensive healthcare analysis with:\n"
+            f"========== END PROVIDED CONTEXT ==========\n\n"
+            f"Based ONLY on the context above, provide a comprehensive healthcare analysis with:\n"
             f"1. Current research landscape\n"
             f"2. Regulatory status\n"
             f"3. Market opportunity\n"
             f"4. Risk factors\n"
-            f"5. Key recommendations"
+            f"5. Key recommendations\n"
+            f"Cite source URLs for every claim."
         )
 
         response = self.llm.invoke([HumanMessage(content=synthesis_prompt)])

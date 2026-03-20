@@ -82,6 +82,7 @@ jobs:
           from research_and_analyst.observability.tracing import Tracer, MetricsCollector
           from research_and_analyst.cost_optimization.token_tracker import TokenTracker, EmbeddingCache
           from research_and_analyst.database.db_config import get_daily_usage, increment_daily_usage, DAILY_REQUEST_LIMIT
+          from research_and_analyst.verification.cross_verifier import CrossVerifier, VerificationReport, VerifiedClaim
           print('All module imports: OK')
           "
 
@@ -147,6 +148,27 @@ jobs:
           stats = mc.get_histogram_stats('latency', labels={'agent': 'research'})
           assert stats['count'] == 1
           print('Metrics Collector: PASS')
+
+          # Test 7: Cross Verifier
+          from research_and_analyst.verification.cross_verifier import CrossVerifier
+          cv = CrossVerifier(min_sources=2, min_credibility=0.5)
+          mock_outputs = [
+              {
+                  'agent_name': 'Agent1',
+                  'output': 'Revenue grew 25% in 2025 according to reports. Market cap reached $10B.',
+                  'sources_used': ['https://reuters.com/article1', 'https://bloomberg.com/article2'],
+              },
+              {
+                  'agent_name': 'Agent2',
+                  'output': 'Revenue grew 25% as confirmed by multiple analysts. The company market cap is $10B.',
+                  'sources_used': ['https://wsj.com/article3', 'https://reuters.com/article1'],
+              },
+          ]
+          report = cv.verify(mock_outputs)
+          assert report.total_claims >= 0
+          assert report.verification_rate >= 0.0
+          assert len(report.filtered_sources) == 0  # All high-authority
+          print('Cross Verifier: PASS')
 
           print()
           print('ALL COMPONENT TESTS PASSED')

@@ -159,6 +159,10 @@ class DecisionGraphState(TypedDict):
     short_term_memory: Dict[str, Any]
     long_term_context: List[str]
 
+    # Cross-Verification
+    verification_report: Optional[Dict[str, Any]]
+    verification_summary: str
+
     # Decision
     decision: Optional[Decision]
 
