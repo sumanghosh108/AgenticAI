@@ -77,6 +77,30 @@ Return ONLY valid JSON with: score, issues, suggestions. Do not include conversa
 """
 
 
+def _normalize_string_list(items: list) -> List[str]:
+    """Convert a list of strings or dicts into a flat list of strings.
+
+    LLMs sometimes return issues/suggestions as dicts like
+    {"type": "Selection Bias", "description": "..."} instead of plain strings.
+    This normalises both forms into List[str].
+    """
+    result = []
+    for item in items:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            # Prefer 'description', fall back to joining all values
+            desc = item.get("description") or item.get("detail") or item.get("message")
+            if desc:
+                label = item.get("type") or item.get("name", "")
+                result.append(f"{label}: {desc}" if label else desc)
+            else:
+                result.append(", ".join(f"{k}: {v}" for k, v in item.items()))
+        else:
+            result.append(str(item))
+    return result
+
+
 class CriticAgent(BaseAgent):
     """
     Multi-mode critic agent that evaluates content quality.
@@ -165,10 +189,10 @@ class CriticAgent(BaseAgent):
                 return CritiqueResult(
                     critic_type=self.critic_type,
                     score=float(data.get("score", 5.0)),
-                    issues=data.get("issues", []),
-                    suggestions=data.get("suggestions", []),
-                    verified_claims=data.get("verified_claims", []),
-                    unverified_claims=data.get("unverified_claims", []),
+                    issues=_normalize_string_list(data.get("issues", [])),
+                    suggestions=_normalize_string_list(data.get("suggestions", [])),
+                    verified_claims=_normalize_string_list(data.get("verified_claims", [])),
+                    unverified_claims=_normalize_string_list(data.get("unverified_claims", [])),
                 )
         except (json.JSONDecodeError, ValueError) as e:
             log.warning(f"Failed to decode critique JSON: {e}")

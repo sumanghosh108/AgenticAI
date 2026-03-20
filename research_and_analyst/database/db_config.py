@@ -344,6 +344,174 @@ async def async_get_report_file_by_id(file_id: int, username: str) -> Optional[d
 
 
 # ─────────────────────────────────────────────
+# User Frequency Tracking — sync
+# ─────────────────────────────────────────────
+
+def increment_login_count(username: str) -> dict:
+    """Atomic login count increment via RPC (upsert, one row per user)."""
+    try:
+        res = _sb().rpc("increment_login_count", {"p_username": username}).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    # Fallback to manual upsert
+    from datetime import datetime
+    res = (
+        _sb().table("user_frequency")
+        .select("*")
+        .eq("username", username)
+        .execute()
+    )
+    if res.data:
+        new_count = res.data[0]["login_count"] + 1
+        _sb().table("user_frequency").update({
+            "login_count": new_count,
+            "last_login_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("username", username).execute()
+        row = res.data[0]
+        row["login_count"] = new_count
+        return row
+    else:
+        payload = {
+            "username": username,
+            "login_count": 1,
+            "report_generate_count": 0,
+            "report_download_count": 0,
+            "last_login_at": datetime.utcnow().isoformat(),
+        }
+        _sb().table("user_frequency").insert(payload).execute()
+        return payload
+
+
+def increment_report_generate_count(username: str) -> dict:
+    """Atomic report generate count increment."""
+    try:
+        res = _sb().rpc("increment_report_generate_count", {"p_username": username}).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    from datetime import datetime
+    res = (
+        _sb().table("user_frequency")
+        .select("*")
+        .eq("username", username)
+        .execute()
+    )
+    if res.data:
+        new_count = res.data[0]["report_generate_count"] + 1
+        _sb().table("user_frequency").update({
+            "report_generate_count": new_count,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("username", username).execute()
+        row = res.data[0]
+        row["report_generate_count"] = new_count
+        return row
+    else:
+        payload = {
+            "username": username,
+            "login_count": 0,
+            "report_generate_count": 1,
+            "report_download_count": 0,
+        }
+        _sb().table("user_frequency").insert(payload).execute()
+        return payload
+
+
+def increment_report_download_count(username: str) -> dict:
+    """Atomic download count increment."""
+    try:
+        res = _sb().rpc("increment_report_download_count", {"p_username": username}).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    from datetime import datetime
+    res = (
+        _sb().table("user_frequency")
+        .select("*")
+        .eq("username", username)
+        .execute()
+    )
+    if res.data:
+        new_count = res.data[0]["report_download_count"] + 1
+        _sb().table("user_frequency").update({
+            "report_download_count": new_count,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("username", username).execute()
+        row = res.data[0]
+        row["report_download_count"] = new_count
+        return row
+    else:
+        payload = {
+            "username": username,
+            "login_count": 0,
+            "report_generate_count": 0,
+            "report_download_count": 1,
+        }
+        _sb().table("user_frequency").insert(payload).execute()
+        return payload
+
+
+def get_user_frequency(username: str) -> dict:
+    """Get user frequency stats."""
+    try:
+        res = _sb().rpc("get_user_frequency", {"p_username": username}).execute()
+        if res.data:
+            return res.data
+    except Exception:
+        pass
+
+    res = (
+        _sb().table("user_frequency")
+        .select("*")
+        .eq("username", username)
+        .execute()
+    )
+    if res.data:
+        row = res.data[0]
+        return {
+            "username": row["username"],
+            "login_count": row["login_count"],
+            "report_generate_count": row["report_generate_count"],
+            "report_download_count": row["report_download_count"],
+            "last_login_at": row.get("last_login_at"),
+        }
+    return {
+        "username": username,
+        "login_count": 0,
+        "report_generate_count": 0,
+        "report_download_count": 0,
+        "last_login_at": None,
+    }
+
+
+# ─────────────────────────────────────────────
+# User Frequency — async (non-blocking)
+# ─────────────────────────────────────────────
+
+async def async_increment_login_count(username: str) -> dict:
+    return await asyncio.to_thread(increment_login_count, username)
+
+
+async def async_increment_report_generate_count(username: str) -> dict:
+    return await asyncio.to_thread(increment_report_generate_count, username)
+
+
+async def async_increment_report_download_count(username: str) -> dict:
+    return await asyncio.to_thread(increment_report_download_count, username)
+
+
+async def async_get_user_frequency(username: str) -> dict:
+    return await asyncio.to_thread(get_user_frequency, username)
+
+
+# ─────────────────────────────────────────────
 # Standalone Test
 # ─────────────────────────────────────────────
 

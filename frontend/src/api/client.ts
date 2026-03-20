@@ -268,6 +268,23 @@ export const reportFilesApi = {
     }>(`/reports/download/${file_id}?username=${username}`),
 };
 
+// ─── User Frequency (Activity Stats) ─────────
+
+export interface UserFrequency {
+  username: string;
+  login_count: number;
+  report_generate_count: number;
+  report_download_count: number;
+  last_login_at: string | null;
+}
+
+export const userFrequencyApi = {
+  getStats: (username: string) =>
+    request<{ success: boolean } & UserFrequency>(
+      `/user/frequency/${username}`
+    ),
+};
+
 // ─── Health ───────────────────────────────────
 
 export const healthApi = {

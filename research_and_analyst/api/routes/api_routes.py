@@ -19,6 +19,8 @@ from research_and_analyst.database.db_config import (
     async_get_daily_usage, async_increment_daily_usage,
     async_save_report_file, async_get_report_files,
     async_get_report_files_by_report, async_get_report_file_by_id,
+    async_increment_login_count, async_increment_report_generate_count,
+    async_increment_report_download_count, async_get_user_frequency,
 )
 from research_and_analyst.auth.google_oauth import (
     is_google_oauth_configured, exchange_code_for_user,
@@ -111,6 +113,8 @@ async def login(req: LoginRequest):
     try:
         user = await async_get_user_by_username(req.username)
         if user and verify_password(req.password, user["password"]):
+            # Increment login count (fire-and-forget, don't block login)
+            asyncio.ensure_future(async_increment_login_count(req.username))
             log.info("User logged in", username=req.username)
             return {"success": True, "message": "Login successful", "username": req.username}
         return {"success": False, "message": "Invalid username or password"}
@@ -152,6 +156,7 @@ async def google_auth(req: GoogleAuthRequest):
         user = await async_get_user_by_email(email)
 
         if user:
+            asyncio.ensure_future(async_increment_login_count(user["username"]))
             log.info("Google login", username=user["username"], email=email)
             return {"success": True, "message": "Login successful", "username": user["username"]}
 
@@ -168,6 +173,7 @@ async def google_auth(req: GoogleAuthRequest):
             email=email,
             password_hash=hash_password(f"google_oauth_{google_user.get('google_id', '')}"),
         )
+        asyncio.ensure_future(async_increment_login_count(username))
         log.info("Google signup", username=username, email=email)
         return {"success": True, "message": "Account created via Google", "username": username}
 
@@ -191,6 +197,8 @@ async def save_report(req: SaveReportRequest):
             research_domain=req.research_domain,
             document=req.document,
         )
+        # Increment report generate count
+        asyncio.ensure_future(async_increment_report_generate_count(req.user_name))
         log.info("Report saved", user=req.user_name, topic=req.research_topic)
         return {"success": True, "message": "Report saved", "report": result}
     except Exception as e:
@@ -717,6 +725,9 @@ async def download_report_file(file_id: int, username: str = ""):
         if not download_url:
             return {"success": False, "message": "Failed to generate download URL"}
 
+        # Increment download count
+        asyncio.ensure_future(async_increment_report_download_count(username))
+
         return {
             "success": True,
             "download_url": download_url,
@@ -728,6 +739,17 @@ async def download_report_file(file_id: int, username: str = ""):
     except Exception as e:
         log.error("Download URL generation failed", error=str(e))
         return {"success": False, "message": "Failed to generate download link."}
+
+
+@api_router.get("/user/frequency/{username}")
+async def get_user_frequency_stats(username: str):
+    """Get user activity frequency stats (login count, report count, download count)."""
+    try:
+        stats = await async_get_user_frequency(username)
+        return {"success": True, **stats}
+    except Exception as e:
+        log.error("User frequency fetch failed", error=str(e))
+        return {"success": False, "message": "Failed to fetch user activity stats."}
 
 
 @api_router.get("/reports/files_for_report/{report_id}")

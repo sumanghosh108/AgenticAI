@@ -354,7 +354,137 @@ $$;
 
 
 -- ─────────────────────────────────────────────
--- 7. Auto updated_at trigger
+-- 7. User Frequency Tracking (one row per user)
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS user_frequency (
+    id                      BIGSERIAL   PRIMARY KEY,
+    username                TEXT        NOT NULL UNIQUE
+                            REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
+    login_count             INTEGER     NOT NULL DEFAULT 0 CHECK (login_count >= 0),
+    report_generate_count   INTEGER     NOT NULL DEFAULT 0 CHECK (report_generate_count >= 0),
+    report_download_count   INTEGER     NOT NULL DEFAULT 0 CHECK (report_download_count >= 0),
+    last_login_at           TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_frequency_username ON user_frequency (username);
+
+ALTER TABLE user_frequency ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service_role_user_frequency" ON user_frequency;
+CREATE POLICY "service_role_user_frequency" ON user_frequency FOR ALL USING (true) WITH CHECK (true);
+
+-- 7a. Atomic login count increment (upsert — one row per user)
+CREATE OR REPLACE FUNCTION increment_login_count(p_username TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_row user_frequency%ROWTYPE;
+BEGIN
+    INSERT INTO user_frequency (username, login_count, last_login_at, updated_at)
+    VALUES (p_username, 1, now(), now())
+    ON CONFLICT (username)
+    DO UPDATE SET
+        login_count  = user_frequency.login_count + 1,
+        last_login_at = now(),
+        updated_at   = now()
+    RETURNING * INTO v_row;
+
+    RETURN jsonb_build_object(
+        'username',              v_row.username,
+        'login_count',           v_row.login_count,
+        'report_generate_count', v_row.report_generate_count,
+        'report_download_count', v_row.report_download_count,
+        'last_login_at',         v_row.last_login_at
+    );
+END;
+$$;
+
+-- 7b. Atomic report generate count increment
+CREATE OR REPLACE FUNCTION increment_report_generate_count(p_username TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_row user_frequency%ROWTYPE;
+BEGIN
+    INSERT INTO user_frequency (username, report_generate_count, updated_at)
+    VALUES (p_username, 1, now())
+    ON CONFLICT (username)
+    DO UPDATE SET
+        report_generate_count = user_frequency.report_generate_count + 1,
+        updated_at            = now()
+    RETURNING * INTO v_row;
+
+    RETURN jsonb_build_object(
+        'username',              v_row.username,
+        'login_count',           v_row.login_count,
+        'report_generate_count', v_row.report_generate_count,
+        'report_download_count', v_row.report_download_count
+    );
+END;
+$$;
+
+-- 7c. Atomic download count increment
+CREATE OR REPLACE FUNCTION increment_report_download_count(p_username TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_row user_frequency%ROWTYPE;
+BEGIN
+    INSERT INTO user_frequency (username, report_download_count, updated_at)
+    VALUES (p_username, 1, now())
+    ON CONFLICT (username)
+    DO UPDATE SET
+        report_download_count = user_frequency.report_download_count + 1,
+        updated_at            = now()
+    RETURNING * INTO v_row;
+
+    RETURN jsonb_build_object(
+        'username',              v_row.username,
+        'login_count',           v_row.login_count,
+        'report_generate_count', v_row.report_generate_count,
+        'report_download_count', v_row.report_download_count
+    );
+END;
+$$;
+
+-- 7d. Get user frequency stats (read-only)
+CREATE OR REPLACE FUNCTION get_user_frequency(p_username TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_row user_frequency%ROWTYPE;
+BEGIN
+    SELECT * INTO v_row FROM user_frequency WHERE username = p_username;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'username',              p_username,
+            'login_count',           0,
+            'report_generate_count', 0,
+            'report_download_count', 0,
+            'last_login_at',         NULL
+        );
+    END IF;
+
+    RETURN jsonb_build_object(
+        'username',              v_row.username,
+        'login_count',           v_row.login_count,
+        'report_generate_count', v_row.report_generate_count,
+        'report_download_count', v_row.report_download_count,
+        'last_login_at',         v_row.last_login_at
+    );
+END;
+$$;
+
+
+-- ─────────────────────────────────────────────
+-- 8. Auto updated_at trigger
 -- ─────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER
@@ -369,6 +499,11 @@ $$;
 DROP TRIGGER IF EXISTS trg_daily_usage_updated_at ON daily_usage;
 CREATE TRIGGER trg_daily_usage_updated_at
     BEFORE UPDATE ON daily_usage
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+DROP TRIGGER IF EXISTS trg_user_frequency_updated_at ON user_frequency;
+CREATE TRIGGER trg_user_frequency_updated_at
+    BEFORE UPDATE ON user_frequency
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 
