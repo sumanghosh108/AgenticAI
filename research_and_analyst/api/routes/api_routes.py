@@ -90,7 +90,7 @@ async def signup(req: SignupRequest):
         return {"success": True, "message": "Signup successful"}
     except Exception as e:
         log.error("Signup failed", error=str(e))
-        return {"success": False, "message": f"Signup failed: {str(e)}"}
+        return {"success": False, "message": "Signup failed. Please check server logs."}
 
 
 @api_router.post("/login")
@@ -103,7 +103,7 @@ async def login(req: LoginRequest):
         return {"success": False, "message": "Invalid username or password"}
     except Exception as e:
         log.error("Login failed", error=str(e))
-        return {"success": False, "message": f"Login failed: {str(e)}"}
+        return {"success": False, "message": "Login failed. Please check server logs."}
 
 # ─────────────────────────────────────────────
 # Google OAuth (Supabase-backed)
@@ -160,7 +160,7 @@ async def google_auth(req: GoogleAuthRequest):
 
     except Exception as e:
         log.error("Google auth failed", error=str(e))
-        return {"success": False, "message": f"Google authentication failed: {str(e)}"}
+        return {"success": False, "message": "Google authentication failed. Please check server logs."}
 
 
 # ─────────────────────────────────────────────
@@ -182,7 +182,7 @@ async def save_report(req: SaveReportRequest):
         return {"success": True, "message": "Report saved", "report": result}
     except Exception as e:
         log.error("Save report failed", error=str(e))
-        return {"success": False, "message": f"Failed to save report: {str(e)}"}
+        return {"success": False, "message": "Failed to save report. Please check server logs."}
 
 
 @api_router.get("/user_reports/{username}")
@@ -193,7 +193,7 @@ async def fetch_user_reports(username: str):
         return {"success": True, "reports": reports}
     except Exception as e:
         log.error("Fetch reports failed", error=str(e))
-        return {"success": False, "message": f"Failed to fetch reports: {str(e)}"}
+        return {"success": False, "message": "Failed to fetch reports. Please check server logs."}
 
 
 # ─────────────────────────────────────────────
@@ -218,7 +218,7 @@ async def generate_report(req: ReportRequest):
         return {"success": True, **result}
     except Exception as e:
         log.error("Report generation failed", error=str(e))
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": "An internal error occurred. Please check server logs."}
 
 
 @api_router.post("/submit_feedback")
@@ -229,7 +229,7 @@ async def submit_feedback(req: FeedbackRequest):
         return {"success": True, **result}
     except Exception as e:
         log.error("Feedback submission failed", error=str(e))
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": "An internal error occurred. Please check server logs."}
 
 
 @api_router.get("/report_status/{thread_id}")
@@ -240,7 +240,7 @@ async def report_status(thread_id: str):
         return {"success": True, **result}
     except Exception as e:
         log.error("Status check failed", error=str(e))
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": "An internal error occurred. Please check server logs."}
 
 
 @api_router.get("/download/{file_name}")
@@ -346,7 +346,7 @@ async def run_decision_analysis(req: DecisionRequest):
         return {"success": True, **result}
     except Exception as e:
         log.error("Decision analysis failed", error=str(e))
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": "An internal error occurred. Please check server logs."}
 
 
 # ─── Async Analysis (queue-based) ───────────
@@ -386,7 +386,7 @@ async def run_decision_async(req: DecisionRequest):
         }
     except Exception as e:
         log.error("Async submission failed", error=str(e))
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": "An internal error occurred. Please check server logs."}
 
 
 @api_router.get("/decision/status/{task_id}")
