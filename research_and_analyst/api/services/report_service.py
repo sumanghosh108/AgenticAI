@@ -179,6 +179,9 @@ class ReportService:
     @staticmethod
     def download_file(file_name: str):
         """Download generated report."""
+        
+        # Sanitize against path traversal completely
+        file_name = os.path.basename(file_name)
 
         report_dir = os.path.join(os.getcwd(), "generated_report")
 
