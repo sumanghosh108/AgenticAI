@@ -81,6 +81,28 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
   );
 }
 
+// Track which task_ids have already been saved to prevent duplicate reports
+const SAVED_TASKS_KEY = 'agenticai_saved_tasks';
+
+function isTaskAlreadySaved(taskId: string): boolean {
+  try {
+    const saved: string[] = JSON.parse(sessionStorage.getItem(SAVED_TASKS_KEY) || '[]');
+    return saved.includes(taskId);
+  } catch { return false; }
+}
+
+function markTaskAsSaved(taskId: string): void {
+  try {
+    const saved: string[] = JSON.parse(sessionStorage.getItem(SAVED_TASKS_KEY) || '[]');
+    if (!saved.includes(taskId)) {
+      saved.push(taskId);
+      // Keep only last 50 to avoid bloat
+      if (saved.length > 50) saved.shift();
+      sessionStorage.setItem(SAVED_TASKS_KEY, JSON.stringify(saved));
+    }
+  } catch { /* ignore */ }
+}
+
 export function AnalysisPage() {
   const [params] = useSearchParams();
   const taskId = params.get('task_id');
@@ -99,9 +121,10 @@ export function AnalysisPage() {
       decisionApi.getResult(taskId).then((r) => {
         if (r.success) {
           setResult(r as Record<string, unknown>);
-          
-          // Auto-save to database and generate PDF/DOCX files
-          if (user?.username && progress.query) {
+
+          // Auto-save to database ONLY ONCE per task_id (prevents duplicates on remount)
+          if (user?.username && progress.query && !isTaskAlreadySaved(taskId)) {
+             markTaskAsSaved(taskId);
              reportHistoryApi.saveReport({
                user_name: user.username,
                research_topic: progress.query,

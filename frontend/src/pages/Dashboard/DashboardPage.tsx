@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, TrendingUp, Stethoscope, Sparkles, Clock, ArrowRight, FileText, AlertCircle, LogIn, Download, BarChart3 } from 'lucide-react';
+import { Search, TrendingUp, Stethoscope, Sparkles, Clock, ArrowRight, FileText, AlertCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { decisionApi, healthApi, reportHistoryApi, userFrequencyApi } from '@/api/client';
-import type { UserFrequency } from '@/api/client';
+import { decisionApi, healthApi, reportHistoryApi } from '@/api/client';
 import { formatTimestamp, truncate } from '@/utils/helpers';
 import { useAuth } from '@/context/AuthContext';
 
@@ -35,7 +34,7 @@ export function DashboardPage() {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [dailyRemaining, setDailyRemaining] = useState<number | null>(null);
   const [limitError, setLimitError] = useState('');
-  const [userStats, setUserStats] = useState<UserFrequency | null>(null);
+
 
   useEffect(() => {
     healthApi.check().then(setServerHealth).catch(() => {});
@@ -53,9 +52,7 @@ export function DashboardPage() {
         if (r.success) setDailyRemaining(r.remaining);
       }).catch(() => {});
 
-      userFrequencyApi.getStats(user.username).then((r) => {
-        if (r.success) setUserStats(r);
-      }).catch(() => {});
+
     }
   }, [user?.username]);
 
@@ -169,46 +166,6 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
-
-        {/* User Activity Stats */}
-        {userStats && (
-          <div>
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-              Your Activity
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-              <Card className="flex items-center gap-4">
-                <div className="w-11 h-11 bg-blue-100 dark:bg-blue-900 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <LogIn className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums">{userStats.login_count}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Logins</p>
-                </div>
-              </Card>
-
-              <Card className="flex items-center gap-4">
-                <div className="w-11 h-11 bg-emerald-100 dark:bg-emerald-900 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <BarChart3 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums">{userStats.report_generate_count}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Reports Generated</p>
-                </div>
-              </Card>
-
-              <Card className="flex items-center gap-4">
-                <div className="w-11 h-11 bg-purple-100 dark:bg-purple-900 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Download className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tabular-nums">{userStats.report_download_count}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Downloads</p>
-                </div>
-              </Card>
-            </div>
-          </div>
-        )}
 
         {/* Recent Tasks & Server Status */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
