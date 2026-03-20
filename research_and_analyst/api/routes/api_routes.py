@@ -1,6 +1,11 @@
 """
 API Routes — REST endpoints for the report generation pipeline.
+
+All handlers are truly async — DB calls run in threads via asyncio.to_thread
+so they never block the FastAPI event loop.
 """
+
+import asyncio
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -8,8 +13,10 @@ from pydantic import BaseModel, Field
 from research_and_analyst.api.services.report_service import ReportService
 from research_and_analyst.database.db_config import (
     hash_password, verify_password,
-    get_user_by_username, get_user_by_email, create_user,
-    save_user_report, get_user_reports,
+    async_get_user_by_username, async_get_user_by_email, async_create_user,
+    async_save_user_report, async_get_user_reports,
+    get_user_by_username, get_user_by_email,
+    async_get_daily_usage, async_increment_daily_usage,
 )
 from research_and_analyst.auth.google_oauth import (
     is_google_oauth_configured, exchange_code_for_user,
@@ -63,23 +70,27 @@ class SaveReportRequest(BaseModel):
 @api_router.post("/signup")
 async def signup(req: SignupRequest):
     try:
-        # Check if email already exists
-        if get_user_by_email(req.email):
+        # Check email and username in parallel (non-blocking)
+        email_user, name_user = await asyncio.gather(
+            async_get_user_by_email(req.email),
+            async_get_user_by_username(req.username),
+        )
+
+        if email_user:
             return {
                 "success": False,
                 "email_exists": True,
                 "message": "This email is already registered. Please login instead.",
             }
 
-        # Check if username is taken
-        if get_user_by_username(req.username):
+        if name_user:
             return {
                 "success": False,
                 "username_taken": True,
                 "message": "Username is already taken. Please choose a different username.",
             }
 
-        create_user(
+        await async_create_user(
             username=req.username,
             email=req.email,
             password_hash=hash_password(req.password),
@@ -96,7 +107,7 @@ async def signup(req: SignupRequest):
 @api_router.post("/login")
 async def login(req: LoginRequest):
     try:
-        user = get_user_by_username(req.username)
+        user = await async_get_user_by_username(req.username)
         if user and verify_password(req.password, user["password"]):
             log.info("User logged in", username=req.username)
             return {"success": True, "message": "Login successful", "username": req.username}
@@ -128,7 +139,7 @@ async def google_auth(req: GoogleAuthRequest):
         return {"success": False, "message": "Google OAuth is not configured on the server."}
 
     try:
-        google_user = exchange_code_for_user(req.code)
+        google_user = await asyncio.to_thread(exchange_code_for_user, req.code)
         email = google_user.get("email")
         name = google_user.get("name", "")
 
@@ -136,7 +147,7 @@ async def google_auth(req: GoogleAuthRequest):
             return {"success": False, "message": "Could not retrieve email from Google."}
 
         # Check if user exists by email
-        user = get_user_by_email(email)
+        user = await async_get_user_by_email(email)
 
         if user:
             log.info("Google login", username=user["username"], email=email)
@@ -146,11 +157,11 @@ async def google_auth(req: GoogleAuthRequest):
         base_username = name.replace(" ", "_").lower() if name else email.split("@")[0]
         username = base_username
         counter = 1
-        while get_user_by_username(username):
+        while await async_get_user_by_username(username):
             username = f"{base_username}_{counter}"
             counter += 1
 
-        create_user(
+        await async_create_user(
             username=username,
             email=email,
             password_hash=hash_password(f"google_oauth_{google_user.get('google_id', '')}"),
@@ -170,9 +181,9 @@ async def google_auth(req: GoogleAuthRequest):
 
 @api_router.post("/save_report")
 async def save_report(req: SaveReportRequest):
-    """Save a generated report to the user_report table."""
+    """Save a generated report to the user_report table (non-blocking)."""
     try:
-        result = save_user_report(
+        result = await async_save_user_report(
             user_name=req.user_name,
             research_topic=req.research_topic,
             research_domain=req.research_domain,
@@ -187,9 +198,9 @@ async def save_report(req: SaveReportRequest):
 
 @api_router.get("/user_reports/{username}")
 async def fetch_user_reports(username: str):
-    """Fetch all reports for a given user."""
+    """Fetch all reports for a given user (non-blocking)."""
     try:
-        reports = get_user_reports(username)
+        reports = await async_get_user_reports(username)
         return {"success": True, "reports": reports}
     except Exception as e:
         log.error("Fetch reports failed", error=str(e))
@@ -258,6 +269,7 @@ class DecisionRequest(BaseModel):
     query: str = Field(..., description="Analysis query (e.g. 'Analyze AI startup market')")
     domain: str = Field("general", description="Domain: finance, healthcare, general")
     max_iterations: int = Field(3, ge=1, le=5, description="Max refinement iterations")
+    username: str = Field("", description="Username for daily rate limiting")
 
 
 class FeedbackSubmission(BaseModel):
@@ -322,6 +334,18 @@ def _get_feedback_store():
 @api_router.post("/decision/analyze")
 async def run_decision_analysis(req: DecisionRequest):
     """Run the full multi-step decision workflow (synchronous)."""
+    # Daily usage limit check
+    if req.username:
+        usage = await async_get_daily_usage(req.username)
+        if usage["limit_reached"]:
+            return {
+                "success": False,
+                "message": "limit reached, come back later",
+                "daily_limit": True,
+                "remaining": 0,
+                "request_count": usage["request_count"],
+            }
+
     # Rate limiting
     rate_check = _get_rate_limiter().check(req.query[:50])
     if not rate_check["allowed"]:
@@ -337,13 +361,20 @@ async def run_decision_analysis(req: DecisionRequest):
         return {"success": False, "message": "Invalid input", "errors": validation["errors"]}
 
     try:
+        # Increment daily usage before processing
+        usage_info = {}
+        if req.username:
+            usage_info = await async_increment_daily_usage(req.username)
+
         service = _get_decision_service()
-        result = service.run(
+        # Run CPU-bound workflow in a thread so it doesn't block the event loop
+        result = await asyncio.to_thread(
+            service.run,
             query=validation["sanitized_query"],
             domain=req.domain,
             max_iterations=req.max_iterations,
         )
-        return {"success": True, **result}
+        return {"success": True, "remaining": usage_info.get("remaining", None), **result}
     except Exception as e:
         log.error("Decision analysis failed", error=str(e))
         return {"success": False, "message": "An internal error occurred. Please check server logs."}
@@ -355,6 +386,18 @@ async def run_decision_analysis(req: DecisionRequest):
 @api_router.post("/decision/analyze/async")
 async def run_decision_async(req: DecisionRequest):
     """Submit analysis for async execution. Returns task_id for polling."""
+    # Daily usage limit check
+    if req.username:
+        usage = await async_get_daily_usage(req.username)
+        if usage["limit_reached"]:
+            return {
+                "success": False,
+                "message": "limit reached, come back later",
+                "daily_limit": True,
+                "remaining": 0,
+                "request_count": usage["request_count"],
+            }
+
     # Rate limiting
     rate_check = _get_rate_limiter().check(req.query[:50])
     if not rate_check["allowed"]:
@@ -369,6 +412,11 @@ async def run_decision_async(req: DecisionRequest):
         return {"success": False, "message": "Invalid input", "errors": validation["errors"]}
 
     try:
+        # Increment daily usage before submitting
+        usage_info = {}
+        if req.username:
+            usage_info = await async_increment_daily_usage(req.username)
+
         service = _get_decision_service()
         queue = _get_task_queue()
 
@@ -382,6 +430,7 @@ async def run_decision_async(req: DecisionRequest):
         return {
             "success": True,
             "task_id": task_id,
+            "remaining": usage_info.get("remaining", None),
             "message": "Analysis submitted. Poll /decision/status/{task_id} for progress.",
         }
     except Exception as e:
@@ -422,6 +471,20 @@ async def list_tasks():
     """List all tasks."""
     queue = _get_task_queue()
     return {"success": True, "tasks": queue.list_tasks()}
+
+
+# ─── Daily Usage ─────────────────────────────
+
+
+@api_router.get("/decision/usage/{username}")
+async def get_usage(username: str):
+    """Get daily usage stats for a user."""
+    try:
+        usage = await async_get_daily_usage(username)
+        return {"success": True, **usage}
+    except Exception as e:
+        log.error("Usage check failed", error=str(e))
+        return {"success": False, "message": "Failed to check usage."}
 
 
 # ─── Feedback ────────────────────────────────

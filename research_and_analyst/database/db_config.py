@@ -1,19 +1,20 @@
 """
-Database configuration for the Autonomous Research Report Generator.
+Database configuration for AgenticAI.
 
 - Supabase as the backend (replaces local PostgreSQL / SQLAlchemy)
 - User model operations via Supabase REST API
 - user_report table for persisting generated reports
+- Both sync and async variants of every operation
 """
 
+import asyncio
 import hashlib
 import os
-from datetime import datetime, timezone
+from typing import Optional
 
 from dotenv import load_dotenv
 
 from research_and_analyst.logger import GLOBAL_LOGGER as log
-from research_and_analyst.exception.custom_exception import ResearchAnalystException
 
 load_dotenv()
 
@@ -21,25 +22,25 @@ load_dotenv()
 # Supabase Client (lazy import to avoid circular deps)
 # ─────────────────────────────────────────────
 
-def _get_supabase():
+def _sb():
     from research_and_analyst.database.supabase_client import supabase
     return supabase
 
 
 # ─────────────────────────────────────────────
-# Password Utilities (hashlib)
+# Password Utilities
 # ─────────────────────────────────────────────
 
 SALT = os.getenv("PASSWORD_SALT", "agenticai_salt_2026")
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using PBKDF2-HMAC-SHA256 (computationally expensive)."""
+    """Hash a password using PBKDF2-HMAC-SHA256."""
     digest = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
         SALT.encode("utf-8"),
-        100000
+        100_000,
     ).hex()
     return f"v2${digest}"
 
@@ -48,7 +49,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a stored hash."""
     if hashed_password.startswith("v2$"):
         return hash_password(plain_password) == hashed_password
-        
     return False
 
 
@@ -62,64 +62,68 @@ def create_tables():
 
 
 # ─────────────────────────────────────────────
-# User CRUD via Supabase
+# User CRUD — sync
 # ─────────────────────────────────────────────
 
-def get_user_by_username(username: str) -> dict | None:
-    """Fetch a user row by username."""
-    sb = _get_supabase()
-    res = sb.table("users").select("*").eq("username", username).execute()
+def get_user_by_username(username: str) -> Optional[dict]:
+    res = _sb().table("users").select("*").eq("username", username).execute()
     return res.data[0] if res.data else None
 
 
-def get_user_by_email(email: str) -> dict | None:
-    """Fetch a user row by email."""
-    sb = _get_supabase()
-    res = sb.table("users").select("*").eq("email", email).execute()
+def get_user_by_email(email: str) -> Optional[dict]:
+    res = _sb().table("users").select("*").eq("email", email).execute()
     return res.data[0] if res.data else None
 
 
 def create_user(username: str, email: str, password_hash: str,
-                age: int | None = None, gender: str | None = None) -> dict:
-    """Insert a new user into the Supabase `users` table."""
-    sb = _get_supabase()
-    payload = {
-        "username": username,
-        "email": email,
-        "password": password_hash,
-    }
+                age: Optional[int] = None, gender: Optional[str] = None) -> dict:
+    payload: dict = {"username": username, "email": email, "password": password_hash}
     if age is not None:
         payload["age"] = age
     if gender is not None:
         payload["gender"] = gender
-
-    res = sb.table("users").insert(payload).execute()
+    res = _sb().table("users").insert(payload).execute()
     return res.data[0] if res.data else {}
 
 
 # ─────────────────────────────────────────────
-# User Report CRUD via Supabase
+# User CRUD — async (non-blocking)
+# ─────────────────────────────────────────────
+
+async def async_get_user_by_username(username: str) -> Optional[dict]:
+    return await asyncio.to_thread(get_user_by_username, username)
+
+
+async def async_get_user_by_email(email: str) -> Optional[dict]:
+    return await asyncio.to_thread(get_user_by_email, email)
+
+
+async def async_create_user(username: str, email: str, password_hash: str,
+                            age: Optional[int] = None,
+                            gender: Optional[str] = None) -> dict:
+    return await asyncio.to_thread(create_user, username, email, password_hash, age, gender)
+
+
+# ─────────────────────────────────────────────
+# Report CRUD — sync
 # ─────────────────────────────────────────────
 
 def save_user_report(user_name: str, research_topic: str,
-                     research_domain: str | None, document: str | None) -> dict:
-    """Insert a report into the Supabase `user_report` table."""
-    sb = _get_supabase()
+                     research_domain: Optional[str] = None,
+                     document: Optional[str] = None) -> dict:
     payload = {
         "user_name": user_name,
         "research_topic": research_topic,
         "research_domain": research_domain or "",
         "document": document or "",
     }
-    res = sb.table("user_report").insert(payload).execute()
+    res = _sb().table("user_report").insert(payload).execute()
     return res.data[0] if res.data else {}
 
 
 def get_user_reports(user_name: str) -> list[dict]:
-    """Fetch all reports for a given user, newest first."""
-    sb = _get_supabase()
     res = (
-        sb.table("user_report")
+        _sb().table("user_report")
         .select("*")
         .eq("user_name", user_name)
         .order("created_at", desc=True)
@@ -129,9 +133,106 @@ def get_user_reports(user_name: str) -> list[dict]:
 
 
 # ─────────────────────────────────────────────
+# Daily Usage (rate limiting) — sync
+# ─────────────────────────────────────────────
+
+DAILY_REQUEST_LIMIT = 5
+
+
+def get_daily_usage(username: str) -> dict:
+    """Get today's usage for a user. Returns {request_count, remaining, limit_reached}."""
+    from datetime import date
+    today = date.today().isoformat()
+
+    res = (
+        _sb().table("daily_usage")
+        .select("*")
+        .eq("username", username)
+        .eq("request_date", today)
+        .execute()
+    )
+
+    if res.data:
+        count = res.data[0]["request_count"]
+    else:
+        count = 0
+
+    return {
+        "username": username,
+        "date": today,
+        "request_count": count,
+        "remaining": max(0, DAILY_REQUEST_LIMIT - count),
+        "limit_reached": count >= DAILY_REQUEST_LIMIT,
+    }
+
+
+def increment_daily_usage(username: str) -> dict:
+    """Increment today's request count. Returns updated usage info."""
+    from datetime import date, datetime
+    today = date.today().isoformat()
+
+    res = (
+        _sb().table("daily_usage")
+        .select("*")
+        .eq("username", username)
+        .eq("request_date", today)
+        .execute()
+    )
+
+    if res.data:
+        new_count = res.data[0]["request_count"] + 1
+        _sb().table("daily_usage").update({
+            "request_count": new_count,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("username", username).eq("request_date", today).execute()
+    else:
+        new_count = 1
+        _sb().table("daily_usage").insert({
+            "username": username,
+            "request_date": today,
+            "request_count": 1,
+        }).execute()
+
+    return {
+        "username": username,
+        "date": today,
+        "request_count": new_count,
+        "remaining": max(0, DAILY_REQUEST_LIMIT - new_count),
+        "limit_reached": new_count >= DAILY_REQUEST_LIMIT,
+    }
+
+
+# ─────────────────────────────────────────────
+# Daily Usage — async (non-blocking)
+# ─────────────────────────────────────────────
+
+async def async_get_daily_usage(username: str) -> dict:
+    return await asyncio.to_thread(get_daily_usage, username)
+
+
+async def async_increment_daily_usage(username: str) -> dict:
+    return await asyncio.to_thread(increment_daily_usage, username)
+
+
+# ─────────────────────────────────────────────
+# Report CRUD — async (non-blocking)
+# ─────────────────────────────────────────────
+
+async def async_save_user_report(user_name: str, research_topic: str,
+                                 research_domain: Optional[str] = None,
+                                 document: Optional[str] = None) -> dict:
+    return await asyncio.to_thread(save_user_report, user_name, research_topic,
+                                   research_domain, document)
+
+
+async def async_get_user_reports(user_name: str) -> list[dict]:
+    return await asyncio.to_thread(get_user_reports, user_name)
+
+
+# ─────────────────────────────────────────────
 # Standalone Test
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     create_tables()
-    print("✅ Supabase connection verified")
+    print("Supabase connection verified")

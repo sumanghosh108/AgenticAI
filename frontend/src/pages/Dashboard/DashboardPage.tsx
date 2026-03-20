@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, TrendingUp, Stethoscope, Sparkles, Clock, ArrowRight, FileText } from 'lucide-react';
+import { Search, TrendingUp, Stethoscope, Sparkles, Clock, ArrowRight, FileText, AlertCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
@@ -32,6 +32,8 @@ export function DashboardPage() {
     created_at: string;
   }>>([]);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [dailyRemaining, setDailyRemaining] = useState<number | null>(null);
+  const [limitError, setLimitError] = useState('');
 
   useEffect(() => {
     healthApi.check().then(setServerHealth).catch(() => {});
@@ -39,20 +41,33 @@ export function DashboardPage() {
       if (r.success) setRecentTasks(r.tasks.slice(0, 5));
     }).catch(() => {});
 
-    // Fetch previous reports for the logged-in user
+    // Fetch previous reports and daily usage for the logged-in user
     if (user?.username) {
       reportHistoryApi.getReports(user.username).then((r) => {
         if (r.success) setPastReports(r.reports);
+      }).catch(() => {});
+
+      decisionApi.getUsage(user.username).then((r) => {
+        if (r.success) setDailyRemaining(r.remaining);
       }).catch(() => {});
     }
   }, [user?.username]);
 
   const handleAnalyze = async () => {
     if (!query.trim()) return;
+    setLimitError('');
     setLoading(true);
     try {
-      const res = await decisionApi.analyzeAsync(query, domain);
+      const res = await decisionApi.analyzeAsync(query, domain, 3, user?.username || '');
+      if (res.daily_limit) {
+        setLimitError('limit reached, come back later');
+        setDailyRemaining(0);
+        return;
+      }
       if (res.success && res.task_id) {
+        if (res.remaining !== undefined && res.remaining !== null) {
+          setDailyRemaining(res.remaining);
+        }
         navigate(`/analysis?task_id=${res.task_id}`);
       }
     } catch {
@@ -82,6 +97,13 @@ export function DashboardPage() {
                 Enter your research question and select a domain for AI-powered analysis
               </p>
 
+              {limitError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/20 border border-red-400/30 text-white mb-2">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-sm font-medium">{limitError}</span>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   value={query}
@@ -89,10 +111,12 @@ export function DashboardPage() {
                   placeholder="e.g., Analyze the AI startup market opportunity in 2025..."
                   className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-brand-200 focus:bg-white/20 focus:border-white/40 outline-none transition"
                   onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+                  disabled={dailyRemaining === 0}
                 />
                 <Button
                   onClick={handleAnalyze}
                   loading={loading}
+                  disabled={dailyRemaining === 0}
                   className="bg-white text-brand-700 hover:bg-brand-50"
                   size="lg"
                   icon={<ArrowRight className="w-5 h-5" />}
@@ -100,6 +124,14 @@ export function DashboardPage() {
                   Analyze
                 </Button>
               </div>
+
+              {dailyRemaining !== null && (
+                <p className="text-xs text-brand-200 mt-2">
+                  {dailyRemaining > 0
+                    ? `${dailyRemaining} of 5 requests remaining today`
+                    : 'Daily limit reached — resets tomorrow'}
+                </p>
+              )}
             </div>
           </div>
         </Card>

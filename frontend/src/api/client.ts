@@ -86,7 +86,7 @@ export const authApi = {
 // ─── Decision Workflow ────────────────────────
 
 export const decisionApi = {
-  analyze: (query: string, domain: string, max_iterations = 3) =>
+  analyze: (query: string, domain: string, max_iterations = 3, username = '') =>
     request<{
       success: boolean;
       thread_id?: string;
@@ -94,19 +94,37 @@ export const decisionApi = {
       status?: string;
       decision?: Record<string, unknown>;
       message?: string;
+      remaining?: number;
+      daily_limit?: boolean;
     }>('/decision/analyze', {
       method: 'POST',
-      body: JSON.stringify({ query, domain, max_iterations }),
+      body: JSON.stringify({ query, domain, max_iterations, username }),
     }),
 
-  analyzeAsync: (query: string, domain: string, max_iterations = 3) =>
-    request<{ success: boolean; task_id?: string; message?: string }>(
+  analyzeAsync: (query: string, domain: string, max_iterations = 3, username = '') =>
+    request<{
+      success: boolean;
+      task_id?: string;
+      message?: string;
+      remaining?: number;
+      daily_limit?: boolean;
+    }>(
       '/decision/analyze/async',
       {
         method: 'POST',
-        body: JSON.stringify({ query, domain, max_iterations }),
+        body: JSON.stringify({ query, domain, max_iterations, username }),
       }
     ),
+
+  getUsage: (username: string) =>
+    request<{
+      success: boolean;
+      username: string;
+      date: string;
+      request_count: number;
+      remaining: number;
+      limit_reached: boolean;
+    }>(`/decision/usage/${username}`),
 
   getStatus: (taskId: string) =>
     request<{ success: boolean } & Record<string, unknown>>(
