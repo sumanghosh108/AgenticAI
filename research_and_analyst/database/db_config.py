@@ -127,9 +127,3 @@ def get_user_reports(user_name: str) -> list[dict]:
 if __name__ == "__main__":
     create_tables()
     print("✅ Supabase connection verified")
-
-    # Quick test: password hashing
-    test_pw = hash_password("testpass")
-    print(f"   Hash of 'testpass': {test_pw[:20]}...")
-    print(f"   Verify correct:     {verify_password('testpass', test_pw)}")
-    print(f"   Verify wrong:       {verify_password('wrong', test_pw)}")
