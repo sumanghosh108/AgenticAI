@@ -43,7 +43,10 @@ async def login(request: Request, username: str = Form(...), password: str =Form
         # Set cookie
         response.set_cookie(
             key="session_id",
-            value=session_id
+            value=session_id,
+            secure=True,
+            httponly=True,
+            samesite="lax"
         )
 
         return response
@@ -171,7 +174,7 @@ async def submit_feedback(
         },
     )
 
-@router.get("/download/{file_name}", response_class=HTMLResponse)
+@router.get("/download/{file_name}")
 async def download_report(file_name: str):
     service = ReportService()
 
@@ -180,4 +183,5 @@ async def download_report(file_name: str):
     if file_response:
         return file_response
 
-    return {"error": f"File {file_name} not found"}
+    from fastapi import HTTPException
+    raise HTTPException(status_code=404, detail="File not found")

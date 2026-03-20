@@ -49,10 +49,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     if hashed_password.startswith("v2$"):
         return hash_password(plain_password) == hashed_password
         
-    # Legacy SHA-256 fallback for backwards compatibility
-    legacy_salted = f"{SALT}{plain_password}"
-    legacy_hash = hashlib.sha256(legacy_salted.encode("utf-8")).hexdigest()
-    return legacy_hash == hashed_password
+    return False
 
 
 # ─────────────────────────────────────────────
