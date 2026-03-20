@@ -18,11 +18,30 @@ const navItems = [
   { to: '/metrics', label: 'Metrics', icon: BarChart3 },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col z-40">
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <aside className={cn(
+        "fixed left-0 top-0 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col z-50 transition-transform duration-300",
+        isOpen ? "translate-x-0" : "-translate-x-full",
+        "md:translate-x-0"
+      )}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200 dark:border-gray-800">
         <div className="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center">
@@ -40,6 +59,7 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
+            onClick={onClose}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
@@ -76,5 +96,6 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

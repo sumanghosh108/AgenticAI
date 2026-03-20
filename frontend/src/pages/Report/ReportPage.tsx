@@ -59,11 +59,11 @@ export function ReportPage() {
     <div>
       <Header title="Reports" subtitle="View and download generated analysis reports" />
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* Search */}
         <Card>
           <div className="space-y-3">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -78,7 +78,7 @@ export function ReportPage() {
                 Load Report
               </Button>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}

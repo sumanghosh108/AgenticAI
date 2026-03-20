@@ -10,7 +10,7 @@ export function Header({ title, subtitle }: Props) {
   const { theme, toggle } = useTheme();
 
   return (
-    <header className="flex items-center justify-between px-8 py-5 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-30">
+    <header className="flex items-center justify-between px-4 md:px-8 py-4 md:py-5 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-30">
       <div>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h1>
         {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>}

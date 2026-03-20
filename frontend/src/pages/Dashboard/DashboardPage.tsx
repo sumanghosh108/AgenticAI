@@ -69,7 +69,7 @@ export function DashboardPage() {
         subtitle="Launch a new analysis or review past decisions"
       />
 
-      <div className="px-8 py-6 space-y-8">
+      <div className="px-4 md:px-8 py-4 md:py-6 space-y-6 md:space-y-8">
         {/* Analysis Launcher */}
         <Card className="bg-gradient-to-br from-brand-600 to-brand-800 border-0 text-white">
           <div className="flex items-start gap-4">
@@ -82,7 +82,7 @@ export function DashboardPage() {
                 Enter your research question and select a domain for AI-powered analysis
               </p>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -109,7 +109,7 @@ export function DashboardPage() {
           <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
             Select Domain
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {DOMAINS.map((d) => (
               <button
                 key={d.id}
