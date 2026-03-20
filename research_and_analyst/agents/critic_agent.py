@@ -28,13 +28,14 @@ Content to evaluate:
 Sources used:
 {sources}
 
-Return your analysis as structured JSON with these fields:
+Return your analysis as ONLY valid structured JSON with these fields:
 - score (0-10): overall factual accuracy
 - issues: list of specific problems found
 - suggestions: list of improvements
 - verified_claims: list of confirmed facts
 - unverified_claims: list of unconfirmed statements
-"""
+
+Do not include any conversational text or formatting outside the JSON block.
 
 BIAS_DETECTION_PROMPT = """\
 You are a bias detection specialist. Analyze the following content for:
@@ -50,7 +51,7 @@ Content to evaluate:
 
 Score from 0 (heavily biased) to 10 (well-balanced).
 
-Return JSON with: score, issues, suggestions.
+Return ONLY valid JSON with: score, issues, suggestions. Do not include conversational text.
 """
 
 LOGIC_VALIDATION_PROMPT = """\
@@ -67,7 +68,7 @@ Content to evaluate:
 
 Score from 0 (seriously flawed) to 10 (logically sound).
 
-Return JSON with: score, issues, suggestions.
+Return ONLY valid JSON with: score, issues, suggestions. Do not include conversational text.
 """
 
 
@@ -138,14 +139,24 @@ class CriticAgent(BaseAgent):
     def _parse_critique(self, raw_output: str) -> CritiqueResult:
         """Parse LLM output into a CritiqueResult, with fallback for non-JSON output."""
         import json
+        import re
 
-        # Try to extract JSON from the output
         try:
-            # Look for JSON block in the response
-            json_start = raw_output.find("{")
-            json_end = raw_output.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                data = json.loads(raw_output[json_start:json_end])
+            # First, try to extract from markdown JSON block
+            match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_output, re.DOTALL | re.IGNORECASE)
+            if match:
+                json_str = match.group(1)
+            else:
+                # Fallback: largest curly brace block
+                json_start = raw_output.find("{")
+                json_end = raw_output.rfind("}") + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = raw_output[json_start:json_end]
+                else:
+                    json_str = ""
+            
+            if json_str:
+                data = json.loads(json_str)
                 return CritiqueResult(
                     critic_type=self.critic_type,
                     score=float(data.get("score", 5.0)),
@@ -154,7 +165,8 @@ class CriticAgent(BaseAgent):
                     verified_claims=data.get("verified_claims", []),
                     unverified_claims=data.get("unverified_claims", []),
                 )
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as e:
+            log.warning(f"Failed to decode critique JSON: {e}")
             pass
 
         # Fallback: return a basic critique
