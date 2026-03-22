@@ -71,45 +71,49 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#201E25] px-4 font-['Montserrat',sans-serif]">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 bg-brand-600 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/25">
-            <Brain className="w-7 h-7 text-white" />
+        <div className="flex flex-col items-center justify-center gap-2 mb-10">
+          <div className="w-14 h-14 bg-[#6C48C3] rounded-2xl flex items-center justify-center shadow-lg shadow-[#6C48C3]/30 mb-2">
+            <Brain className="w-8 h-8 text-white" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AgenticAI</h1>
-            <p className="text-xs text-gray-500 uppercase tracking-widest">Decision Platform</p>
+          <div className="text-center">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#C530EA] to-[#11D5F7] text-transparent bg-clip-text mb-1">AgenticAI</h1>
+            <p className="text-[11px] text-gray-400 uppercase tracking-[0.2em] font-medium">Decision Platform</p>
           </div>
         </div>
 
         {/* Form */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-8">
-          <h2 className="text-xl font-semibold mb-6 text-center">Welcome back</h2>
+        <div className="bg-[#071217] rounded-[10px] shadow-2xl border border-white/10 p-8 sm:p-10 relative overflow-hidden">
+          {/* Subtle top glare effect */}
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+          
+          <h2 className="text-2xl font-semibold mb-8 text-center text-white">Welcome back</h2>
 
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm">
+            <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">
+              <label className="block text-sm font-medium mb-2 text-gray-300">
                 Username
               </label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition"
+                className="w-full px-4 py-3 rounded text-sm border border-white/10 bg-white/5 text-white focus:ring-1 focus:ring-[#11D5F7] focus:border-[#11D5F7] outline-none transition-all placeholder-gray-500"
+                placeholder="Enter your username"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">
+              <label className="block text-sm font-medium mb-2 text-gray-300">
                 Password
               </label>
               <div className="relative">
@@ -117,29 +121,35 @@ export function LoginPage() {
                   type={showPwd ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition pr-10"
+                  className="w-full px-4 py-3 rounded text-sm border border-white/10 bg-white/5 text-white focus:ring-1 focus:ring-[#11D5F7] focus:border-[#11D5F7] outline-none transition-all pr-10 placeholder-gray-500"
+                  placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
                 >
                   {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <Button type="submit" loading={loading} className="w-full" size="lg">
+            <Button 
+              type="submit" 
+              loading={loading} 
+              className="w-full py-3 mt-2 !bg-[#6C48C3] hover:!bg-[#8D65F0] !text-white !border-0 text-base font-medium rounded transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+              size="lg"
+            >
               Sign In
             </Button>
             
-            <div className="relative mt-6 mb-4">
+            <div className="relative mt-8 mb-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
+                <div className="w-full border-t border-white/10"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-gray-900 text-gray-500">Or continue with</span>
+                <span className="px-4 bg-[#071217] text-gray-500">Or continue with</span>
               </div>
             </div>
 
@@ -148,7 +158,7 @@ export function LoginPage() {
               variant="secondary"
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 transition"
+              className="w-full py-3 flex items-center justify-center gap-3 !border-white/20 !text-white !bg-transparent hover:!bg-white/5 transition-all rounded text-base font-medium"
               size="lg"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -161,9 +171,9 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-gray-500">
+          <p className="mt-8 text-center text-sm text-gray-400">
             Don't have an account?{' '}
-            <Link to="/signup" className="text-brand-600 hover:text-brand-700 font-medium">
+            <Link to="/signup" className="text-[#11D5F7] hover:text-white transition-colors font-medium ml-1">
               Sign up
             </Link>
           </p>

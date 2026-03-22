@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Layout } from '@/components/layout/Layout';
+import { LandingPage } from '@/pages/Landing/LandingPage';
 import { LoginPage } from '@/pages/Auth/LoginPage';
 import { SignupPage } from '@/pages/Auth/SignupPage';
 import { DashboardPage } from '@/pages/Dashboard/DashboardPage';
@@ -25,23 +26,22 @@ export default function App() {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
 
       {/* Protected routes inside Layout */}
       <Route
-        path="/"
         element={
           <ProtectedRoute>
             <Layout />
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="analysis" element={<AnalysisPage />} />
-        <Route path="reports" element={<ReportPage />} />
-        <Route path="metrics" element={<MetricsPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/analysis" element={<AnalysisPage />} />
+        <Route path="/reports" element={<ReportPage />} />
+        <Route path="/metrics" element={<MetricsPage />} />
       </Route>
 
       {/* Catch-all */}
